@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import axios from 'axios';
+
+const API_URL = 'https://expo-web-pay.onrender.com/api';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -15,8 +17,9 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Add fade-in animation when component mounts
     setFadeIn(true);
+    // Log the API URL on component mount
+    console.log('Login component mounted. Using API URL:', API_URL);
   }, []);
 
   const handleChange = (e) => {
@@ -29,39 +32,55 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+
+    const loginUrl = `${API_URL}/auth/login`;
+    console.log('Attempting login with:', { username: formData.username });
+    console.log('Using full API URL:', loginUrl);
+    
     try {
-      const res = await axios.post('http://localhost:5001/api/auth/login', formData);
-      localStorage.setItem('token', res.data.token);
-      toast.success('Login successful!', {
-        position: 'top-right',
-        autoClose: 2000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: 'colored',
+      console.log('Making login request...');
+      const res = await axios.post(loginUrl, formData, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
+      console.log('Login response:', res.data);
       
-      // Open admin page in a new tab
-      setTimeout(() => {
-        const adminUrl = window.location.origin + '/admin';
-        window.open(adminUrl, '_blank');
-        
-        // Optionally, navigate back to the public portal in the current tab
-        navigate('/');
-      }, 2000);
+      if (res.data && res.data.token) {
+        localStorage.setItem('token', res.data.token);
+        toast.success('Login successful!');
+        navigate('/admin');
+      } else {
+        console.error('No token in response:', res.data);
+        throw new Error('No token received in response');
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Error logging in');
-      toast.error(err.response?.data?.message || 'Wrong username or password!', {
+      console.error('Login error:', err);
+      
+      let errorMessage = 'Error logging in';
+      
+      if (err.response) {
+        console.error('Server response:', err.response.data);
+        console.error('Response status:', err.response.status);
+        console.error('Response headers:', err.response.headers);
+        errorMessage = err.response.data.message || 'Invalid credentials';
+      } else if (err.request) {
+        console.error('No response received:', err.request);
+        errorMessage = 'No response from server. Please check your connection.';
+      } else {
+        console.error('Error details:', err.message);
+        errorMessage = 'Error setting up request. Please try again.';
+      }
+      
+      setError(errorMessage);
+      toast.error(errorMessage, {
         position: 'top-right',
-        autoClose: 3000,
+        autoClose: 5000,
         hideProgressBar: false,
         closeOnClick: true,
         pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: 'colored',
+        draggable: true
       });
     } finally {
       setLoading(false);
@@ -70,7 +89,6 @@ const Login = () => {
 
   return (
     <>
-      {/* Navigation Bar with animation */}
       <nav className="navbar navbar-expand-lg navbar-dark" style={{
         background: 'linear-gradient(135deg, #000428 0%, #004e92 100%)',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
@@ -79,25 +97,6 @@ const Login = () => {
       }}>
         <div className="container d-flex justify-content-between align-items-center">
           <Link to="/" className="navbar-brand d-flex align-items-center">
-            <div style={{ 
-              width: '45px',
-              height: '45px',
-              marginRight: '10px',
-              borderRadius: '50%',
-              overflow: 'hidden',
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
-              border: '2px solid rgba(255, 255, 255, 0.3)'
-            }}>
-              <img 
-                src="/company_logo.jpg" 
-                alt="Company Logo" 
-                style={{ 
-                  width: '100%', 
-                  height: '100%',
-                  objectFit: 'cover'
-                }}
-              />
-            </div>
             <span style={{ fontWeight: '700', letterSpacing: '1px' }}>End of The Road</span>
           </Link>
           
@@ -115,44 +114,19 @@ const Login = () => {
                 transition: 'all 0.3s ease',
                 border: 'none'
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-              }}
             >
               <i className="fas fa-gamepad me-2"></i>
               Public Portal
-            </Link>
-            
-            <Link 
-              to="/login" 
-              className="btn"
-              style={{
-                background: 'rgba(255,255,255,0.3)',
-                color: 'white',
-                borderRadius: '6px',
-                textDecoration: 'none',
-                fontWeight: '500',
-                letterSpacing: '0.5px',
-                transition: 'all 0.3s ease',
-                border: 'none'
-              }}
-            >
-              <i className="fas fa-lock me-2"></i>
-              Admin Portal
             </Link>
           </div>
         </div>
       </nav>
       
-      <div className={`container mt-5 ${fadeIn ? 'fadeIn' : ''}`} style={{ animation: 'fadeIn 1s ease-in-out' }}>
-        <ToastContainer />
+      <div className={`container mt-5 ${fadeIn ? 'fadeIn' : ''}`}>
         <div className="row justify-content-center">
           <div className="col-md-6">
-            <div className="card">
-              <div className="card-header text-center">
+            <div className="card shadow">
+              <div className="card-header text-center bg-primary text-white">
                 <h2 className="mb-0">Admin Login</h2>
               </div>
               <div className="card-body">
@@ -166,12 +140,11 @@ const Login = () => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    marginBottom: '20px',
-                    animation: 'pulse 2s infinite'
+                    marginBottom: '20px'
                   }}>
                     <i className="fas fa-user-shield" style={{ fontSize: '2.5rem', color: 'white' }}></i>
                   </div>
-                  <h3 className="card-title text-center">Welcome Back</h3>
+                  <h3 className="card-title">Welcome Back</h3>
                   <p className="text-muted">Please login to access your admin dashboard</p>
                 </div>
                 
@@ -236,32 +209,12 @@ const Login = () => {
             </div>
             
             <div className="text-center mt-4">
-              <div className="footer-contact" style={{
-                background: 'linear-gradient(to right, rgba(58, 123, 213, 0.1), rgba(0, 210, 255, 0.1))',
-                padding: '15px 20px',
-                borderRadius: '10px',
-                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.05)',
-                transition: 'all 0.3s ease',
-                animation: 'fadeIn 1s ease-in-out'
-              }}>
-                <p style={{ margin: 0 }}>
-                  <i className="fas fa-question-circle me-2" style={{ color: '#3a7bd5' }}></i>
-                  Need help? Contact <a href="mailto:sacayan.karl@gmail.com" style={{
-                    color: '#3a7bd5',
-                    textDecoration: 'none',
-                    fontWeight: '600',
-                    transition: 'all 0.3s ease',
-                    position: 'relative'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#00d2ff';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = '#3a7bd5';
-                  }}
-                  >sacayan.karl@gmail.com</a>
+              <div className="footer-contact p-3 bg-light rounded">
+                <p className="mb-0">
+                  <i className="fas fa-question-circle me-2 text-primary"></i>
+                  Need help? Contact <a href="mailto:sacayan.karl@gmail.com" className="text-primary">administrator</a>
                 </p>
-                <p className="mt-2 mb-0" style={{ fontSize: '0.8rem', color: '#888' }}>
+                <p className="mt-2 mb-0 text-muted small">
                   <i className="fas fa-copyright me-1"></i> 2023 End of The Road Game. All rights reserved.
                 </p>
               </div>
@@ -269,6 +222,7 @@ const Login = () => {
           </div>
         </div>
       </div>
+      <ToastContainer position="top-right" autoClose={3000} />
     </>
   );
 };
