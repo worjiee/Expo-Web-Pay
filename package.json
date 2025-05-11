@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "client": "cd client && npm start",
-    "build": "echo 'Using render-build.sh instead'",
+    "build": "bash render-build.sh",
+    "render-build": "bash render-build.sh",
     "dev:full": "concurrently \"npm run dev\" \"npm run client\""
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "fs": "0.0.1-security",
     "jsonwebtoken": "^8.5.1",
     "mongoose": "^6.7.2",
     "path": "^0.12.7"
