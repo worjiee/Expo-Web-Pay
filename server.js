@@ -25,6 +25,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/codes', require('./routes/codes'));
 
 // Serve static assets
+console.log('Serving static files from:', path.join(__dirname, 'client/build'));
 app.use(express.static(path.join(__dirname, 'client/build')));
 
 // Handle React routing, return all requests to React app

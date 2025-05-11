@@ -14,9 +14,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Production build
-/client/build
-
 # Misc
 .DS_Store
 .vscode/
