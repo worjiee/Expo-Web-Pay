@@ -3,8 +3,8 @@
 // Use the latest backend API URL directly
 const API_URL = 'https://q-o6boqvomj-karls-projects-fccc69ea.vercel.app/api';
 
-// Allow local mockAPI to handle logins when API is unavailable
-const FORCE_REAL_API = false;
+// Force the use of real API to ensure cross-device compatibility
+const FORCE_REAL_API = true;
 
 // Log the API URL
 console.log('Using API URL:', API_URL);

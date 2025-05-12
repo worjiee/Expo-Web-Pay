@@ -17,7 +17,7 @@ const realApi = axios.create({
     'Content-Type': 'application/json'
   },
   withCredentials: false,
-  timeout: 10000 // 10 second timeout to allow for slower connections
+  timeout: 15000 // 15 second timeout to allow for slower connections
 });
 
 // Add a request interceptor for authentication
@@ -131,6 +131,12 @@ const mockApi = {
 // Hybrid API that tries real API first, then falls back to mock if needed
 const api = {
   post: async (endpoint, data) => {
+    // Always try to use real API for code verification first
+    if (endpoint === '/codes/verify' && config.FORCE_REAL_API) {
+      console.log('Forcing real API for code verification');
+      return await realApi.post(endpoint, data);
+    }
+    
     // For login requests, always try both methods if needed
     if (endpoint === '/auth/login') {
       try {
@@ -164,6 +170,12 @@ const api = {
   },
   
   get: async (endpoint) => {
+    // Always use real API for getting codes if real API is forced
+    if (endpoint === '/codes' && config.FORCE_REAL_API) {
+      console.log('Forcing real API for getting codes');
+      return await realApi.get(endpoint);
+    }
+    
     if (useMockAPI && !config.FORCE_REAL_API) {
       return mockApi.get(endpoint);
     }

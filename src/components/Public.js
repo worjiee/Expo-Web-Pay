@@ -59,6 +59,13 @@ const Public = () => {
     setError('');
     setVerified(false);
 
+    // Validate code format
+    if (!code || code.trim() === '') {
+      setError('Please enter a valid access code');
+      setLoading(false);
+      return;
+    }
+
     try {
       console.log('Verifying code:', code);
       
@@ -78,7 +85,10 @@ const Public = () => {
         }
       );
       
-      const res = await api.post('/codes/verify', { code });
+      // Send code to server for verification - use the real API
+      const res = await api.post('/codes/verify', { code: code.trim() });
+      console.log('Verification response:', res.data);
+      
       setMessage(res.data.message);
       setError('');
       setCode('');
@@ -114,7 +124,16 @@ const Public = () => {
       
     } catch (err) {
       console.error('Verification error:', err);
-      setError(err.response?.data?.message || 'Invalid code');
+      
+      let errorMsg = 'Invalid access code. Please try again.';
+      
+      if (err.response && err.response.data && err.response.data.message) {
+        errorMsg = err.response.data.message;
+      } else if (!err.response) {
+        errorMsg = 'Network error. Please check your connection and try again.';
+      }
+      
+      setError(errorMsg);
       setMessage('');
       
       // Show enhanced error message
@@ -124,7 +143,7 @@ const Public = () => {
             <i className="fas fa-exclamation-circle me-2" style={{ fontSize: '1.5rem' }}></i>
             <strong>Error!</strong>
           </div>
-          <div style={{ marginTop: '5px' }}>{err.response?.data?.message || 'Invalid access code. Please try again.'}</div>
+          <div style={{ marginTop: '5px' }}>{errorMsg}</div>
         </div>,
         {
           position: 'top-center',
