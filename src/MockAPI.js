@@ -1,133 +1,95 @@
-// Mock API implementation to bypass CORS issues
-// This simulates the backend responses for the main functions
+// Mock API implementation for local operation without external dependencies
+// This simulates the backend responses for the main functions, using only localStorage
 
-// Import remote server functions and proxy service
-import { updateCodeStatus, syncFromRemoteStorage } from './remoteServer';
-import { generateRandomCode, proxyUtils } from './proxyService';
+// Import from our updated proxy service
+import { 
+  generateRandomCode, 
+  getLocalCodes, 
+  saveLocalCodes, 
+  updateCodeStatus,
+  exportCodesAsText,
+  importCodesFromText
+} from './proxyService';
 
 // Admin credentials
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'admin123';
 
-// Setup persistent mock database using localStorage
-const getStoredData = () => {
-  try {
-    const storedCodes = localStorage.getItem('mockDb_codes');
-    return storedCodes ? JSON.parse(storedCodes) : [];
-  } catch (e) {
-    console.error('Error loading stored codes:', e);
-    return [];
-  }
+// Create or get our mock database 
+const initMockDb = () => {
+  // Always initialize from localStorage to ensure we're always up-to-date
+  const storedCodes = localStorage.getItem('mockDb_codes');
+  return {
+    codes: storedCodes ? JSON.parse(storedCodes) : []
+  };
 };
 
-const storeData = (codes) => {
-  try {
-    localStorage.setItem('mockDb_codes', JSON.stringify(codes));
-  } catch (e) {
-    console.error('Error storing codes:', e);
-  }
-};
-
-// Mock database
-const mockDb = {
-  users: [
-    { 
-      id: 1, 
-      username: ADMIN_USERNAME, 
-      password: ADMIN_PASSWORD, 
-      role: 'admin'
-    }
-  ],
-  // Initialize with codes from localStorage if available
-  codes: getStoredData()
-};
-
-// Helper to generate JWT-like tokens (simplified)
-const generateToken = (userData) => {
-  // This is just a placeholder, not a real JWT
-  const token = btoa(JSON.stringify({ 
-    id: userData.id, 
-    username: userData.username, 
-    role: userData.role,
-    exp: Date.now() + 24 * 60 * 60 * 1000 // 24 hours expiry
-  }));
-  console.log('Generated token:', token);
-  return token;
-};
-
-// Helper to dispatch real-time update events
-const dispatchCodeEvent = (eventType, codeData) => {
-  // Create a custom event for real-time updates
-  const event = new CustomEvent('code-update', {
-    detail: {
-      type: eventType,
-      code: codeData,
-      timestamp: new Date().toISOString()
-    }
-  });
-  
-  // Dispatch the event globally
-  window.dispatchEvent(event);
-  
-  // Also update a localStorage item to notify other tabs
-  localStorage.setItem('code_update_event', JSON.stringify({
-    type: eventType,
-    code: codeData,
-    timestamp: new Date().toISOString()
-  }));
-  // Immediately remove it so future changes will still trigger storage events
-  setTimeout(() => localStorage.removeItem('code_update_event'), 100);
+// Access the mock database - this ensures we always get fresh data
+const getMockDb = () => {
+  return {
+    codes: getLocalCodes()
+  };
 };
 
 // Mock API functions
 const MockAPI = {
-  // Auth endpoints
+  // Authentication endpoints
   auth: {
     login: async (credentials) => {
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      console.log('Mock API login with credentials:', credentials);
       const { username, password } = credentials;
       
-      // Check if user exists and password matches
-      const user = mockDb.users.find(u => u.username === username);
-      
-      if (!user) {
-        console.error('User not found:', username);
-        throw {
-          response: {
-            status: 401,
-            data: { message: 'Invalid username or password' }
-          }
-        };
-      }
-      
-      if (user.password !== password) {
-        console.error('Password mismatch for user:', username);
-        throw {
-          response: {
-            status: 401,
-            data: { message: 'Invalid username or password' }
-          }
-        };
-      }
-      
-      // Generate token
-      const token = generateToken(user);
-      
-      // Return success response with token
-      console.log('Login successful, returning token');
-      return {
-        data: {
-          token: token,
-          user: {
-            id: user.id,
-            username: user.username,
-            role: user.role
-          },
+      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+        // Generate mock JWT token - not a real JWT, just for simulation
+        const token = `ey${Math.random().toString(36).substring(2)}${Date.now().toString(36)}`;
+        
+        // Store in localStorage for persistent login
+        localStorage.setItem('auth_token', token);
+        
+        return {
+          success: true,
+          token,
           message: 'Login successful'
-        }
+        };
+      }
+      
+      // Authentication failed
+      throw {
+        success: false,
+        message: 'Invalid credentials'
+      };
+    },
+    logout: async () => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Remove auth token
+      localStorage.removeItem('auth_token');
+      
+      return {
+        success: true,
+        message: 'Logout successful'
+      };
+    },
+    validateToken: async () => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Check if token exists in localStorage
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        throw {
+          success: false,
+          message: 'Invalid or expired token'
+        };
+      }
+      
+      return {
+        success: true,
+        message: 'Token is valid'
       };
     }
   },
@@ -145,79 +107,51 @@ const MockAPI = {
       const standardizedCode = code.trim().toUpperCase();
       console.log('Standardized code for verification:', standardizedCode);
       
-      // Get the latest codes directly from localStorage to avoid any sync issues
-      let currentCodes = [];
-      try {
-        const storedCodes = localStorage.getItem('mockDb_codes');
-        currentCodes = storedCodes ? JSON.parse(storedCodes) : [];
-        console.log('Current codes from localStorage:', currentCodes);
-      } catch (err) {
-        console.error('Error getting codes from localStorage:', err);
-        currentCodes = mockDb.codes; // Fallback to memory if localStorage fails
-      }
+      // Get the latest codes directly from localStorage
+      const { codes } = getMockDb();
+      console.log('Found codes for verification:', codes.length);
       
-      // Check if code exists and is not used - do a case-insensitive check
-      const codeRecord = currentCodes.find(c => 
-        c.code.toLowerCase() === standardizedCode.toLowerCase()
+      // Find exact match (case insensitive)
+      const matchingCode = codes.find(
+        c => c.code.toUpperCase() === standardizedCode
       );
       
-      console.log('Found code record:', codeRecord);
-      
-      if (!codeRecord) {
-        console.error('Invalid code provided:', standardizedCode);
-        
-        // Return a simple error for invalid codes
+      if (!matchingCode) {
+        console.log('No matching code found');
         throw {
-          response: {
-            status: 404,
-            data: { message: 'Invalid code' }
-          }
+          success: false,
+          message: 'Invalid code'
         };
       }
       
-      if (codeRecord.used) {
-        console.error('Code already used:', standardizedCode);
+      if (matchingCode.used) {
+        console.log('Code already used:', matchingCode);
         throw {
-          response: {
-            status: 400,
-            data: { message: 'Code already used' }
-          }
+          success: false,
+          message: 'This code has already been used'
         };
       }
       
-      // Mark code as used
-      codeRecord.used = true;
-      codeRecord.usedAt = new Date().toISOString();
-      console.log('Code marked as used:', codeRecord);
+      // Mark as used
+      updateCodeStatus(matchingCode.code, true);
+      console.log('Code verified successfully:', matchingCode);
       
-      // Update the codeRecord in the array
-      const updatedCodes = currentCodes.map(c => 
-        c.code.toLowerCase() === standardizedCode.toLowerCase() ? codeRecord : c
-      );
-      
-      // Store updated codes directly in localStorage and in memory
-      localStorage.setItem('mockDb_codes', JSON.stringify(updatedCodes));
-      mockDb.codes = updatedCodes;
-      console.log('Updated localStorage and memory with used code');
-      
-      // Dispatch real-time update event
-      dispatchCodeEvent('code-used', codeRecord);
-      
-      // Return success response
       return {
-        data: {
-          message: 'Code verified successfully'
-        }
+        success: true,
+        message: 'Code verified successfully'
       };
     },
     
     getAll: async () => {
       // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Return all codes
+      // Get codes from mock database
+      const { codes } = getMockDb();
+      
       return {
-        data: mockDb.codes
+        success: true,
+        data: codes
       };
     },
     
@@ -228,134 +162,234 @@ const MockAPI = {
       // Generate a random 5-letter code
       const randomCode = generateRandomCode();
       
-      // Get current codes from localStorage to ensure we have the latest
-      let currentCodes = [];
-      try {
-        const storedCodes = localStorage.getItem('mockDb_codes');
-        currentCodes = storedCodes ? JSON.parse(storedCodes) : [];
-      } catch (err) {
-        console.error('Error getting codes from localStorage:', err);
-        currentCodes = mockDb.codes; // Fallback
-      }
+      // Get current codes from mock database
+      const { codes } = getMockDb();
       
       // Add to mock database
-      const newId = currentCodes.length > 0 
-        ? Math.max(...currentCodes.map(c => c.id)) + 1 
+      const newId = codes.length > 0 
+        ? Math.max(...codes.map(c => c.id)) + 1 
         : 1;
-         
+      
       const newCode = { 
         id: newId, 
-        code: randomCode, 
+        code: randomCode,
         used: false,
-        createdAt: new Date().toISOString()
+        generatedAt: new Date().toISOString(),
+        usedAt: null
       };
       
-      // Update both the in-memory mockDb and localStorage directly
-      const updatedCodes = [...currentCodes, newCode];
-      mockDb.codes = updatedCodes;
-      localStorage.setItem('mockDb_codes', JSON.stringify(updatedCodes));
+      // Add to mock database
+      codes.push(newCode);
       
-      console.log('Generated new 5-letter code:', newCode);
-      console.log('Updated codes list in localStorage and memory');
+      // Save to localStorage
+      saveLocalCodes(codes);
       
-      // Dispatch real-time update event for code generation
-      dispatchCodeEvent('code-generated', newCode);
-      
-      // Return success response with the code in the expected format
       return {
-        data: {
-          code: newCode,
-          message: 'Code generated successfully'
-        }
+        success: true,
+        data: newCode
       };
     },
     
-    addCustomCode: async (newCode) => {
-      // Add the new code to the mock database
-      mockDb.codes.push(newCode);
-      console.log('Added custom code to mock database:', newCode);
-      console.log('Updated codes:', mockDb.codes);
-      
-      // Store updated codes
-      storeData(mockDb.codes);
-      
-      // Dispatch real-time update event for custom code creation
-      dispatchCodeEvent('code-created', newCode);
-      
-      return newCode;
-    },
-    
-    deleteAllCodes: async () => {
-      // Clear the codes array
-      mockDb.codes = [];
-      console.log('All codes deleted from mock database');
-      
-      // Store updated codes (empty array)
-      storeData(mockDb.codes);
-      
-      // Dispatch real-time update event for all codes deletion
-      dispatchCodeEvent('codes-deleted', null);
-      
-      // Return success response
-      return {
-        data: {
-          message: 'All codes deleted successfully'
-        }
-      };
-    },
-    
-    deleteCode: async (id) => {
+    updateStatus: async (codeData) => {
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      console.log('Deleting code with ID:', id, 'Type:', typeof id);
+      const { code, used } = codeData;
       
-      // Handle invalid ID
-      if (isNaN(id) || id === undefined) {
-        console.error('Invalid ID provided for deletion:', id);
+      // Update code status
+      const success = updateCodeStatus(code, used);
+      
+      if (!success) {
         throw {
-          response: {
-            status: 400,
-            data: { message: 'Invalid code ID format' }
-          }
+          success: false,
+          message: 'Code not found'
         };
       }
       
-      // Find code index
-      const index = mockDb.codes.findIndex(c => c.id === id);
-      console.log('Found code at index:', index, 'All codes:', mockDb.codes);
-      
-      if (index === -1) {
-        console.error('Code not found with ID:', id);
-        throw {
-          response: {
-            status: 404,
-            data: { message: 'Code not found' }
-          }
-        };
-      }
-      
-      // Remove from mock database
-      const deletedCode = mockDb.codes[index];
-      mockDb.codes.splice(index, 1);
-      console.log('Deleted code with ID:', id, 'Code details:', deletedCode);
-      console.log('Updated codes list:', mockDb.codes);
-      
-      // Store updated codes
-      storeData(mockDb.codes);
-      
-      // Dispatch real-time update event for code deletion
-      dispatchCodeEvent('code-deleted', deletedCode);
-      
-      // Return success response
       return {
-        data: {
-          message: 'Code deleted successfully',
-          code: deletedCode
-        }
+        success: true,
+        message: `Code ${used ? 'marked as used' : 'unmarked as used'}`
+      };
+    },
+    
+    delete: async (codeData) => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const { code } = codeData;
+      
+      // Get codes from mock database
+      const { codes } = getMockDb();
+      
+      // Find the code
+      const codeIndex = codes.findIndex(c => c.code === code);
+      
+      if (codeIndex === -1) {
+        throw {
+          success: false,
+          message: 'Code not found'
+        };
+      }
+      
+      // Remove the code
+      codes.splice(codeIndex, 1);
+      
+      // Save to localStorage
+      saveLocalCodes(codes);
+      
+      return {
+        success: true,
+        message: 'Code deleted'
+      };
+    },
+    
+    deleteAll: async () => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Clear all codes
+      saveLocalCodes([]);
+      
+      return {
+        success: true,
+        message: 'All codes deleted'
+      };
+    },
+    
+    generateMultiple: async (countData) => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const { count } = countData;
+      const codeCount = parseInt(count, 10);
+      
+      if (isNaN(codeCount) || codeCount < 1 || codeCount > 100) {
+        throw {
+          success: false,
+          message: 'Invalid count. Please provide a number between 1 and 100'
+        };
+      }
+      
+      // Get existing codes
+      const { codes } = getMockDb();
+      
+      // Start with the highest existing ID
+      let nextId = codes.length > 0 
+        ? Math.max(...codes.map(c => c.id)) + 1 
+        : 1;
+      
+      const newCodes = [];
+      
+      // Generate multiple codes
+      for (let i = 0; i < codeCount; i++) {
+        let randomCode;
+        let attempts = 0;
+        
+        // Ensure uniqueness
+        do {
+          randomCode = generateRandomCode();
+          attempts++;
+          
+          // Prevent infinite loops
+          if (attempts > 100) {
+            throw {
+              success: false,
+              message: 'Failed to generate unique codes'
+            };
+          }
+        } while (codes.some(c => c.code === randomCode) || 
+                newCodes.some(c => c.code === randomCode));
+        
+        const newCode = {
+          id: nextId++,
+          code: randomCode,
+          used: false,
+          generatedAt: new Date().toISOString(),
+          usedAt: null
+        };
+        
+        newCodes.push(newCode);
+        codes.push(newCode);
+      }
+      
+      // Save to localStorage
+      saveLocalCodes(codes);
+      
+      return {
+        success: true,
+        data: newCodes,
+        message: `Generated ${newCodes.length} new codes`
+      };
+    },
+    
+    exportCodes: async () => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Get codes from mock database
+      const { codes } = getMockDb();
+      
+      // Get only unused codes
+      const unusedCodes = codes.filter(code => !code.used);
+      
+      if (unusedCodes.length === 0) {
+        throw {
+          success: false,
+          message: 'No unused codes to export'
+        };
+      }
+      
+      // Export codes as text
+      const exportedData = exportCodesAsText(unusedCodes);
+      
+      if (!exportedData) {
+        throw {
+          success: false,
+          message: 'Failed to export codes'
+        };
+      }
+      
+      return {
+        success: true,
+        data: exportedData,
+        count: unusedCodes.length
+      };
+    },
+    
+    importCodes: async (importData) => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const { importText } = importData;
+      
+      if (!importText || importText.trim() === '') {
+        throw {
+          success: false,
+          message: 'No import data provided'
+        };
+      }
+      
+      // Import codes from text
+      const result = importCodesFromText(importText.trim());
+      
+      if (!result.success) {
+        throw {
+          success: false,
+          message: `Import failed: ${result.error}`
+        };
+      }
+      
+      return {
+        success: true,
+        totalImported: result.totalImported,
+        newCodesAdded: result.newCodesAdded,
+        message: `Imported ${result.newCodesAdded} new codes out of ${result.totalImported} total`
       };
     }
   }
 };
+
+// Initialize the mock database on load
+initMockDb();
 
 export default MockAPI; 
