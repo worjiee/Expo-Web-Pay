@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import axios from 'axios';
-
-const API_URL = 'https://expo-web-pay.onrender.com/api';
+import api from '../api/axios';
+import config from '../config';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -19,7 +18,7 @@ const Login = () => {
   useEffect(() => {
     setFadeIn(true);
     // Log the API URL on component mount
-    console.log('Login component mounted. Using API URL:', API_URL);
+    console.log('Login component mounted. Using API URL:', config.API_URL);
   }, []);
 
   const handleChange = (e) => {
@@ -34,17 +33,13 @@ const Login = () => {
     setLoading(true);
     setError('');
 
-    const loginUrl = `${API_URL}/auth/login`;
+    const loginUrl = `${config.API_URL}/auth/login`;
     console.log('Attempting login with:', { username: formData.username });
     console.log('Using full API URL:', loginUrl);
     
     try {
       console.log('Making login request...');
-      const res = await axios.post(loginUrl, formData, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      const res = await api.post('/auth/login', formData);
       console.log('Login response:', res.data);
       
       if (res.data && res.data.token) {
