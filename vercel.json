@@ -1,7 +1,7 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://q-cg4xks0mg-karls-projects-fccc69ea.vercel.app/api/:path*" }
+    { "source": "/api/:path*", "destination": "https://q-ag2acn4dg-karls-projects-fccc69ea.vercel.app/api/:path*" }
   ],
   "headers": [
     {
