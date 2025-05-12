@@ -27,6 +27,132 @@ const Admin = () => {
     }
     fetchCodes();
     setFadeIn(true);
+    
+    // Set up real-time update listener
+    const handleCodeUpdate = (event) => {
+      const updateData = event.detail;
+      console.log('Real-time code update received:', updateData);
+      
+      // Different actions based on the update type
+      switch (updateData.type) {
+        case 'code-used':
+          // Update the specific code that was used
+          if (updateData.code && (updateData.code.id || updateData.code._id)) {
+            console.log('Updating specific code:', updateData.code);
+            setCodes(prevCodes => {
+              return prevCodes.map(code => {
+                // Check if this is the specific code that was used
+                if ((code.id && code.id === updateData.code.id) || 
+                    (code._id && code._id === updateData.code._id) ||
+                    (code.code && code.code === updateData.code.code)) {
+                  console.log('Marking code as used:', code);
+                  return {
+                    ...code,
+                    used: true,
+                    usedAt: updateData.code.usedAt
+                  };
+                }
+                return code;
+              });
+            });
+            
+            toast.info(`Code "${updateData.code.code}" was just used!`, {
+              position: 'top-right',
+              autoClose: 3000
+            });
+          } else {
+            // If we don't have proper code details, refresh the whole list
+            console.warn('Incomplete code data in update event, refreshing all codes');
+            fetchCodes();
+          }
+          break;
+          
+        case 'code-generated':
+        case 'code-created':
+          // Refresh the entire list to be safe
+          fetchCodes();
+          break;
+          
+        case 'code-deleted':
+          // Remove the deleted code from the list
+          setCodes(prevCodes => 
+            prevCodes.filter(code => 
+              code.id !== updateData.code.id && code._id !== updateData.code._id
+            )
+          );
+          break;
+          
+        case 'codes-deleted':
+          // Clear all codes
+          setCodes([]);
+          break;
+          
+        default:
+          // For unknown events, just refresh the list
+          fetchCodes();
+      }
+    };
+    
+    // Listen for custom events for real-time updates
+    window.addEventListener('code-update', handleCodeUpdate);
+    
+    // Listen for localStorage events (for cross-tab updates)
+    const handleStorageEvent = (event) => {
+      if (event.key === 'code_update_event') {
+        try {
+          const updateData = JSON.parse(event.newValue);
+          if (updateData && updateData.type) {
+            console.log('Storage event code update received:', updateData);
+            
+            // Apply the same logic as direct events
+            switch (updateData.type) {
+              case 'code-used':
+                if (updateData.code && (updateData.code.id || updateData.code._id)) {
+                  console.log('Updating specific code from storage event:', updateData.code);
+                  setCodes(prevCodes => {
+                    return prevCodes.map(code => {
+                      // Check if this is the specific code that was used
+                      if ((code.id && code.id === updateData.code.id) || 
+                          (code._id && code._id === updateData.code._id) ||
+                          (code.code && code.code === updateData.code.code)) {
+                        return {
+                          ...code,
+                          used: true,
+                          usedAt: updateData.code.usedAt
+                        };
+                      }
+                      return code;
+                    });
+                  });
+                  
+                  toast.info(`Code "${updateData.code.code}" was just used!`, {
+                    position: 'top-right',
+                    autoClose: 3000
+                  });
+                } else {
+                  // If we don't have proper code details, refresh the whole list
+                  fetchCodes();
+                }
+                break;
+                
+              default:
+                // For all other event types, just refresh the full list
+                fetchCodes();
+            }
+          }
+        } catch (e) {
+          console.error('Error processing storage event:', e);
+        }
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageEvent);
+    
+    // Clean up event listeners when component unmounts
+    return () => {
+      window.removeEventListener('code-update', handleCodeUpdate);
+      window.removeEventListener('storage', handleStorageEvent);
+    };
   }, [navigate]);
 
   const fetchCodes = async () => {
@@ -327,6 +453,38 @@ const Admin = () => {
                 <p className="text-muted mb-0">Manage your game access codes</p>
               </div>
             </div>
+            <div className="mt-3">
+              <div className="alert alert-info">
+                <i className="fas fa-info-circle me-2"></i>
+                <strong>Info:</strong> Codes are now persistent and will be saved in your browser.
+              </div>
+              <div className="row mt-3">
+                <div className="col">
+                  <div className="card bg-light">
+                    <div className="card-body text-center">
+                      <h3 className="display-4">{codes.length}</h3>
+                      <p className="text-muted">Total Codes</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="col">
+                  <div className="card bg-light">
+                    <div className="card-body text-center">
+                      <h3 className="display-4">{codes.filter(c => !c.used && !c.isUsed).length}</h3>
+                      <p className="text-muted">Available Codes</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="col">
+                  <div className="card bg-light">
+                    <div className="card-body text-center">
+                      <h3 className="display-4">{codes.filter(c => c.used || c.isUsed).length}</h3>
+                      <p className="text-muted">Used Codes</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -371,11 +529,106 @@ const Admin = () => {
                     className="form-control"
                     placeholder="Enter custom code"
                     value={customCode}
-                    onChange={(e) => setCustomCode(e.target.value)}
+                    onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
                   />
                   <button className="btn btn-primary" onClick={createCustomCode}>
                     Create Custom Code
                   </button>
+                </div>
+                
+                <div className="form-group">
+                  <label>Import Codes from Link</label>
+                  <div className="input-group mb-3">
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Paste shared code link here"
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Try to extract the import parameter from the URL
+                        try {
+                          // Check if it's a URL or just the import parameter
+                          let importParam;
+                          if (value.includes('?import=')) {
+                            const url = new URL(value);
+                            importParam = url.searchParams.get('import');
+                          } else {
+                            // Assume it's just the encoded data
+                            importParam = value;
+                          }
+                          
+                          if (importParam) {
+                            // Decode the base64 encoded codes
+                            const codesData = JSON.parse(atob(importParam));
+                            
+                            if (Array.isArray(codesData) && codesData.length > 0) {
+                              // Add the codes to our state
+                              let added = 0;
+                              const updatedCodes = [...codes];
+                              
+                              codesData.forEach(newCode => {
+                                const codeExists = codes.some(c => c.code === newCode.code);
+                                if (!codeExists) {
+                                  // Convert the imported code to the format needed
+                                  const codeToAdd = {
+                                    id: newCode.id || Math.floor(Math.random() * 100000),
+                                    code: newCode.code,
+                                    used: false,
+                                    createdAt: newCode.createdAt || new Date().toISOString()
+                                  };
+                                  updatedCodes.push(codeToAdd);
+                                  added++;
+                                  
+                                  // Also create the code via API to ensure persistence
+                                  try {
+                                    api.post('/codes/create-custom', { code: codeToAdd.code });
+                                  } catch (err) {
+                                    console.error('Error adding imported code:', err);
+                                  }
+                                }
+                              });
+                              
+                              // Update the codes state
+                              setCodes(updatedCodes);
+                              
+                              // Show success message
+                              if (added > 0) {
+                                toast.success(`Successfully imported ${added} new codes.`);
+                                // Clear the input
+                                e.target.value = '';
+                              } else {
+                                toast.info('No new codes were imported. You may already have these codes.');
+                              }
+                            }
+                          }
+                        } catch (err) {
+                          console.error('Error importing codes from link:', err);
+                          if (value.length > 10) {
+                            toast.error('Invalid code import link. Please check the format.');
+                          }
+                        }
+                      }}
+                    />
+                    <button 
+                      className="btn btn-info"
+                      onClick={() => {
+                        // Display instructions
+                        toast.info(
+                          <div>
+                            <h6>How to Import Codes:</h6>
+                            <ol className="ps-3 mb-0">
+                              <li>On another device, use the "Share Codes" button.</li>
+                              <li>Copy the shared link.</li>
+                              <li>Paste it in the field above.</li>
+                            </ol>
+                          </div>, 
+                          { autoClose: 8000 }
+                        );
+                      }}
+                    >
+                      <i className="fas fa-question-circle"></i>
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="form-group">
@@ -389,7 +642,31 @@ const Admin = () => {
                   ></textarea>
                   <button 
                     className="btn btn-primary w-100" 
-                    onClick={uploadBulkCodes}
+                    onClick={() => {
+                      // Split the text into lines and process each code
+                      const codeLines = bulkCodes.split('\n')
+                        .map(line => line.trim())
+                        .filter(line => line.length > 0);
+                      
+                      if (codeLines.length === 0) {
+                        toast.error('Please enter at least one code');
+                        return;
+                      }
+                      
+                      // Process each code
+                      codeLines.forEach(async (code) => {
+                        try {
+                          await api.post('/codes/create-custom', { code: code.toUpperCase() });
+                        } catch (err) {
+                          console.error('Error adding bulk code:', code, err);
+                        }
+                      });
+                      
+                      // Clear the textarea and show success message
+                      setBulkCodes('');
+                      toast.success(`${codeLines.length} codes imported successfully`);
+                      fetchCodes();
+                    }}
                     disabled={loading}
                   >
                     {loading ? 'Importing...' : 'Import Codes'}
@@ -403,15 +680,117 @@ const Admin = () => {
         <div className="card">
           <div className="card-header d-flex justify-content-between align-items-center">
             <h5>Code Database</h5>
-            <button 
-              className="btn btn-danger" 
-              onClick={deleteAllCodes}
-              disabled={loading || codes.length === 0}
-            >
-              Delete All Codes
-            </button>
+            <div>
+              <div className="btn-group">
+                <button
+                  className="btn btn-outline-secondary"
+                  onClick={() => {
+                    // Export codes as CSV
+                    const csvContent = "data:text/csv;charset=utf-8," 
+                      + "ID,Code,Status,CreatedAt,UsedAt\n"
+                      + codes.map(c => {
+                          return `${c.id || c._id},"${c.code}","${(c.used || c.isUsed) ? 'Used' : 'Available'}","${c.createdAt || 'N/A'}","${c.usedAt || 'N/A'}"`;
+                        }).join("\n");
+                    
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodedUri);
+                    link.setAttribute("download", "codes.csv");
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    toast.success('Codes exported successfully');
+                  }}
+                  disabled={codes.length === 0}
+                >
+                  <i className="fas fa-download me-2"></i>
+                  Export Codes
+                </button>
+                <button
+                  className="btn btn-outline-primary"
+                  onClick={() => {
+                    // Generate a shareable link with encoded codes data
+                    // Only include codes that haven't been used
+                    const unusedCodes = codes.filter(c => !c.used && !c.isUsed);
+                    
+                    if (unusedCodes.length === 0) {
+                      toast.error('No unused codes available to share');
+                      return;
+                    }
+                    
+                    // Create compact version of codes for sharing (only essential data)
+                    const shareCodes = unusedCodes.map(c => ({
+                      id: c.id || c._id,
+                      code: c.code,
+                      createdAt: c.createdAt
+                    }));
+                    
+                    // Encode the codes as a base64 string
+                    const encodedCodes = btoa(JSON.stringify(shareCodes));
+                    
+                    // Create the share URL with the current domain
+                    const shareUrl = `${window.location.origin}/?import=${encodedCodes}`;
+                    
+                    // Copy to clipboard
+                    navigator.clipboard.writeText(shareUrl).then(() => {
+                      toast.success('Shareable link copied to clipboard! You can send this to another device.');
+                    }).catch(err => {
+                      console.error('Failed to copy: ', err);
+                      // Fallback: create a text area element and copy manually
+                      const textArea = document.createElement("textarea");
+                      textArea.value = shareUrl;
+                      document.body.appendChild(textArea);
+                      textArea.focus();
+                      textArea.select();
+                      try {
+                        document.execCommand('copy');
+                        toast.success('Shareable link copied to clipboard! You can send this to another device.');
+                      } catch (err) {
+                        toast.error('Failed to copy link. Please copy it manually.');
+                        console.error('Copy failed:', err);
+                      }
+                      document.body.removeChild(textArea);
+                    });
+                  }}
+                  disabled={codes.filter(c => !c.used && !c.isUsed).length === 0}
+                >
+                  <i className="fas fa-share-alt me-2"></i>
+                  Share Codes
+                </button>
+                <button 
+                  className="btn btn-danger" 
+                  onClick={deleteAllCodes}
+                  disabled={loading || codes.length === 0}
+                >
+                  <i className="fas fa-trash-alt me-2"></i>
+                  Delete All Codes
+                </button>
+              </div>
+            </div>
           </div>
           <div className="card-body">
+            <div className="mb-3">
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search codes..."
+                onChange={(e) => {
+                  // Filter codes based on search query
+                  const searchQuery = e.target.value.toLowerCase();
+                  if (searchQuery) {
+                    setCodes(codes.filter(c => 
+                      c.code.toLowerCase().includes(searchQuery) ||
+                      (c.id && c.id.toString().includes(searchQuery)) ||
+                      (c._id && c._id.toString().includes(searchQuery))
+                    ));
+                  } else {
+                    // If search query is empty, fetch all codes
+                    fetchCodes();
+                  }
+                }}
+              />
+            </div>
             <div className="table-responsive">
               <table className="table table-striped">
                 <thead>
@@ -424,28 +803,39 @@ const Admin = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {codes.map((code) => (
-                    <tr key={code.id || code._id}>
-                      <td>{code.code}</td>
-                      <td>
-                        <span className={`badge ${code.used || code.isUsed ? 'bg-danger' : 'bg-success'}`}>
-                          {code.used || code.isUsed ? 'Used' : 'Available'}
-                        </span>
-                      </td>
-                      <td>{code.createdAt ? new Date(code.createdAt).toLocaleString() : 'Invalid Date'}</td>
-                      <td>
-                        {code.usedAt ? new Date(code.usedAt).toLocaleString() : 'Not used yet'}
-                      </td>
-                      <td>
-                        <button 
-                          className="btn btn-sm btn-danger" 
-                          onClick={() => deleteCode(code.id || code._id)}
-                        >
-                          Delete
-                        </button>
+                  {codes.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="text-center py-3">
+                        <i className="fas fa-info-circle me-2"></i>
+                        No codes available. Generate some codes to get started.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    codes.map((code) => (
+                      <tr key={code.id || code._id}>
+                        <td>
+                          <strong>{code.code}</strong>
+                        </td>
+                        <td>
+                          <span className={`badge ${code.used || code.isUsed ? 'bg-danger' : 'bg-success'}`}>
+                            {code.used || code.isUsed ? 'Used' : 'Available'}
+                          </span>
+                        </td>
+                        <td>{code.createdAt ? new Date(code.createdAt).toLocaleString() : 'Invalid Date'}</td>
+                        <td>
+                          {code.usedAt ? new Date(code.usedAt).toLocaleString() : 'Not used yet'}
+                        </td>
+                        <td>
+                          <button 
+                            className="btn btn-sm btn-danger" 
+                            onClick={() => deleteCode(code.id || code._id)}
+                          >
+                            <i className="fas fa-trash-alt"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

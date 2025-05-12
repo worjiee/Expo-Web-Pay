@@ -13,42 +13,69 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fadeIn, setFadeIn] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     setFadeIn(true);
     // Log the API URL on component mount
     console.log('Login component mounted. Using API URL:', config.API_URL);
-  }, []);
+    
+    // Check if user is already logged in
+    const token = localStorage.getItem('token');
+    if (token) {
+      console.log('Token already exists, redirecting to admin');
+      navigate('/admin');
+    }
+  }, [navigate]);
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
+    setError(''); // Clear error when user starts typing
+    setConnectionError(false);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setConnectionError(false);
 
-    const loginUrl = `${config.API_URL}/auth/login`;
-    console.log('Attempting login with:', { username: formData.username });
-    console.log('Using full API URL:', loginUrl);
+    console.log('Attempting login with username:', formData.username);
     
     try {
-      console.log('Making login request...');
+      console.log('Making login request to API with fallback...');
+      
+      // Show loading toast
+      toast.info('Logging in...', {
+        position: 'top-right',
+        autoClose: 2000
+      });
+      
+      // Try to login
       const res = await api.post('/auth/login', formData);
       console.log('Login response:', res.data);
       
       if (res.data && res.data.token) {
+        // Store token
         localStorage.setItem('token', res.data.token);
-        toast.success('Login successful!');
+        console.log('Token stored in localStorage');
+        
+        // Show success message
+        toast.success('Login successful!', {
+          position: 'top-right',
+          autoClose: 2000
+        });
+        
+        // Redirect to admin page
         navigate('/admin');
       } else {
-        console.error('No token in response:', res.data);
-        throw new Error('No token received in response');
+        console.error('Invalid response format - no token in response:', res.data);
+        setError('Invalid response from server');
+        toast.error('Server error: Invalid response format');
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -56,29 +83,37 @@ const Login = () => {
       let errorMessage = 'Error logging in';
       
       if (err.response) {
-        console.error('Server response:', err.response.data);
+        console.error('Server response error:', err.response.data);
         console.error('Response status:', err.response.status);
-        console.error('Response headers:', err.response.headers);
-        errorMessage = err.response.data.message || 'Invalid credentials';
+        errorMessage = err.response.data?.message || 'Invalid username or password';
       } else if (err.request) {
         console.error('No response received:', err.request);
         errorMessage = 'No response from server. Please check your connection.';
+        setConnectionError(true);
       } else {
-        console.error('Error details:', err.message);
-        errorMessage = 'Error setting up request. Please try again.';
+        console.error('Error setting up request:', err.message);
+        errorMessage = 'Error connecting to server. Please try again.';
       }
       
       setError(errorMessage);
       toast.error(errorMessage, {
         position: 'top-right',
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true
+        autoClose: 5000
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Debug function to check local storage
+  const debugLocalStorage = () => {
+    try {
+      const token = localStorage.getItem('token');
+      console.log('Current token in localStorage:', token);
+      return true;
+    } catch (err) {
+      console.error('Error accessing localStorage:', err);
+      return false;
     }
   };
 
@@ -143,7 +178,17 @@ const Login = () => {
                   <p className="text-muted">Please login to access your admin dashboard</p>
                 </div>
                 
-                {error && <div className="alert alert-danger">{error}</div>}
+                {error && 
+                  <div className={`alert ${connectionError ? 'alert-warning' : 'alert-danger'}`}>
+                    {error}
+                    {connectionError && (
+                      <div className="mt-2 small">
+                        <strong>Note:</strong> If this is your first login attempt, the server might be starting up. 
+                        Please wait a moment and try again.
+                      </div>
+                    )}
+                  </div>
+                }
                 
                 <form onSubmit={handleSubmit}>
                   <div className="mb-4">
@@ -199,6 +244,14 @@ const Login = () => {
                       </>
                     )}
                   </button>
+                  
+                  {/* Help text for troubleshooting */}
+                  <div className="text-center mt-3">
+                    <small className="text-muted">
+                      <i className="fas fa-info-circle me-1"></i>
+                      Default credentials: admin / admin123
+                    </small>
+                  </div>
                 </form>
               </div>
             </div>

@@ -60,6 +60,24 @@ const Public = () => {
     setVerified(false);
 
     try {
+      console.log('Verifying code:', code);
+      
+      // Show a loading message
+      toast.info(
+        <div>
+          <i className="fas fa-spinner fa-spin me-2"></i> Verifying code...
+        </div>,
+        { 
+          position: 'top-center',
+          autoClose: 1000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: false,
+          draggable: false,
+          progress: undefined 
+        }
+      );
+      
       const res = await api.post('/codes/verify', { code });
       setMessage(res.data.message);
       setError('');

@@ -17,7 +17,7 @@ const realApi = axios.create({
     'Content-Type': 'application/json'
   },
   withCredentials: false,
-  timeout: 8000 // 8 second timeout
+  timeout: 10000 // 10 second timeout to allow for slower connections
 });
 
 // Add a request interceptor for authentication
@@ -41,16 +41,31 @@ realApi.interceptors.response.use(
   (response) => {
     console.log('Response received:', response.status);
     // If we get a successful response, reset the mock API flag
-    useMockAPI = false;
+    useMockAPI = !config.FORCE_REAL_API && false;
     return response;
   },
   (error) => {
     console.error('Response error:', error);
     
+    // Handle authentication errors
+    if (error.response && error.response.status === 401) {
+      console.warn('Authentication error detected. User may need to log in again.');
+      
+      // If not on login page, clear token
+      if (window.location.pathname !== '/login') {
+        console.log('Clearing token due to auth error');
+        localStorage.removeItem('token');
+        
+        // Redirect to login if not already there
+        window.location.href = '/login';
+      }
+    }
+    
     // If this is a connection error, set the flag to use mock API
     if (!error.response) {
       console.warn('Connection issues detected. Will use mock API for future requests.');
-      useMockAPI = true;
+      // Only use mock API if we're not forcing real API
+      useMockAPI = !config.FORCE_REAL_API && true;
       connectionIssuesDetected = true;
     }
     
@@ -71,7 +86,14 @@ const mockApi = {
     console.log(`Using MOCK API for POST ${endpoint}`);
     // Handle different endpoints
     if (endpoint === '/auth/login') {
-      return MockAPI.auth.login(data);
+      try {
+        const response = await MockAPI.auth.login(data);
+        console.log('Mock login response:', response);
+        return response;
+      } catch (err) {
+        console.error('Mock login error:', err);
+        throw err;
+      }
     } else if (endpoint === '/codes/verify') {
       return MockAPI.codes.verify(data);
     } else if (endpoint === '/codes/generate') {
@@ -109,15 +131,31 @@ const mockApi = {
 // Hybrid API that tries real API first, then falls back to mock if needed
 const api = {
   post: async (endpoint, data) => {
-    if (useMockAPI) {
+    // For login requests, always try both methods if needed
+    if (endpoint === '/auth/login') {
+      try {
+        console.log('Trying real API login first');
+        return await realApi.post(endpoint, data);
+      } catch (err) {
+        console.log('Real API login failed, trying mock API');
+        if (!config.FORCE_REAL_API) {
+          console.log('Falling back to mock login');
+          return mockApi.post(endpoint, data);
+        }
+        throw err;
+      }
+    }
+    
+    // For other requests, follow standard fallback logic
+    if (useMockAPI && !config.FORCE_REAL_API) {
       return mockApi.post(endpoint, data);
     }
     
     try {
       return await realApi.post(endpoint, data);
     } catch (err) {
-      // If we get a connection error, try using the mock API
-      if (!err.response && connectionIssuesDetected) {
+      // Only fall back to mock if not forcing real API
+      if (!config.FORCE_REAL_API && !err.response && connectionIssuesDetected) {
         console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
         return mockApi.post(endpoint, data);
       }
@@ -126,15 +164,15 @@ const api = {
   },
   
   get: async (endpoint) => {
-    if (useMockAPI) {
+    if (useMockAPI && !config.FORCE_REAL_API) {
       return mockApi.get(endpoint);
     }
     
     try {
       return await realApi.get(endpoint);
     } catch (err) {
-      // If we get a connection error, try using the mock API
-      if (!err.response && connectionIssuesDetected) {
+      // Only fall back to mock if not forcing real API
+      if (!config.FORCE_REAL_API && !err.response && connectionIssuesDetected) {
         console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
         return mockApi.get(endpoint);
       }
@@ -143,15 +181,15 @@ const api = {
   },
   
   delete: async (endpoint) => {
-    if (useMockAPI) {
+    if (useMockAPI && !config.FORCE_REAL_API) {
       return mockApi.delete(endpoint);
     }
     
     try {
       return await realApi.delete(endpoint);
     } catch (err) {
-      // If we get a connection error, try using the mock API
-      if (!err.response && connectionIssuesDetected) {
+      // Only fall back to mock if not forcing real API
+      if (!config.FORCE_REAL_API && !err.response && connectionIssuesDetected) {
         console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
         return mockApi.delete(endpoint);
       }
