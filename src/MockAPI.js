@@ -1,6 +1,10 @@
 // Mock API implementation to bypass CORS issues
 // This simulates the backend responses for the main functions
 
+// Import remote server functions and proxy service
+import { updateCodeStatus, syncFromRemoteStorage } from './remoteServer';
+import { generateRandomCode, proxyUtils } from './proxyService';
+
 // Admin credentials
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'admin123';
@@ -136,17 +140,67 @@ const MockAPI = {
       
       const { code } = codeData;
       console.log('Verifying code:', code);
+      
+      // Standardize code format - convert to uppercase
+      const standardizedCode = code.trim().toUpperCase();
+      console.log('Standardized code for verification:', standardizedCode);
       console.log('Available codes:', mockDb.codes);
       
       // Check if code exists and is not used - do a case-insensitive check
       const codeRecord = mockDb.codes.find(c => 
-        c.code.toLowerCase() === code.toLowerCase()
+        c.code.toLowerCase() === standardizedCode.toLowerCase()
       );
       
       console.log('Found code record:', codeRecord);
       
       if (!codeRecord) {
-        console.error('Invalid code provided:', code);
+        console.error('Invalid code provided:', standardizedCode);
+        
+        // Try one more sync with remote before failing
+        try {
+          console.log('Trying to sync with remote storage before failing verification');
+          await syncFromRemoteStorage();
+          
+          // Check again after syncing
+          const refreshedCodes = getStoredData();
+          const refreshedCodeRecord = refreshedCodes.find(c => 
+            c.code.toLowerCase() === standardizedCode.toLowerCase()
+          );
+          
+          if (refreshedCodeRecord) {
+            console.log('Found code after syncing:', refreshedCodeRecord);
+            
+            if (refreshedCodeRecord.used) {
+              console.error('Code found after sync but already used:', standardizedCode);
+              throw {
+                response: {
+                  status: 400,
+                  data: { message: 'Code already used' }
+                }
+              };
+            }
+            
+            // Mark code as used
+            refreshedCodeRecord.used = true;
+            refreshedCodeRecord.usedAt = new Date().toISOString();
+            storeData(refreshedCodes);
+            
+            // Sync the updated status
+            updateCodeStatus(refreshedCodeRecord.code, true);
+            
+            // Dispatch real-time update event
+            dispatchCodeEvent('code-used', refreshedCodeRecord);
+            
+            return {
+              data: {
+                message: 'Code verified successfully (after sync)'
+              }
+            };
+          }
+        } catch (syncErr) {
+          console.error('Sync attempt failed:', syncErr);
+        }
+        
         throw {
           response: {
             status: 404,
@@ -156,7 +210,7 @@ const MockAPI = {
       }
       
       if (codeRecord.used) {
-        console.error('Code already used:', code);
+        console.error('Code already used:', standardizedCode);
         throw {
           response: {
             status: 400,
@@ -172,6 +226,9 @@ const MockAPI = {
       
       // Store updated codes
       storeData(mockDb.codes);
+      
+      // Also sync to remote storage to update all devices
+      updateCodeStatus(codeRecord.code, true);
       
       // Dispatch real-time update event
       dispatchCodeEvent('code-used', codeRecord);
@@ -200,16 +257,7 @@ const MockAPI = {
       
       // Generate a random 5-letter code
       // This creates a random 5-letter uppercase code
-      const generateRandomLetters = (length) => {
-        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        let result = '';
-        for (let i = 0; i < length; i++) {
-          result += characters.charAt(Math.floor(Math.random() * characters.length));
-        }
-        return result;
-      };
-      
-      const randomCode = generateRandomLetters(5);
+      const randomCode = generateRandomCode();
       
       // Add to mock database
       const newId = mockDb.codes.length > 0 
