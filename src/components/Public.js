@@ -23,7 +23,7 @@ const Public = () => {
     { id: 6, name: "Drix John Delos Reyes", role: "Producer", image: "/team/drix.jpg", info: "Drix manages project timelines and coordinates between all departments to deliver quality games." },
     { id: 7, name: "Stefanie Zophia Choco", role: "Narrative Designer", image: "/team/phia.jpg", info: "Stefanie crafts compelling stories and characters that engage players in our game worlds." },
     { id: 8, name: "Paul Rovic Angeles", role: "QA Lead", image: "/team/hookadoncic.jpg", info: "Paul ensures our games meet the highest quality standards before release through rigorous testing." },
-    { id: 9, name: "Nathan Villena", role: "Community Manager", image: "/team/curry.jpg", info: "Nathan builds and nurtures our amazing player community, gathering feedback and organizing events." },
+    { id: 9, name: "Nathan Villena", role: "Community Manager", image: "/team/thathan.jpg", info: "Nathan builds and nurtures our amazing player community, gathering feedback and organizing events." },
     { id: 10, name: "John Lynard Cabading", role: "Marketing Director", image: "/team/polgorg.jpg", info: "John develops strategies to bring our games to wider audiences and create engaging campaigns." },
     { id: 11, name: "Bernard James Raplisa", role: "Technical Artist", image: "/team/bernard.jpg", info: "Bernard bridges the gap between art and programming, optimizing visual assets and creating technical solutions for the art pipeline." }
   ];
@@ -111,165 +111,199 @@ const Public = () => {
       return;
     }
 
+    const codeToVerify = code.trim().toUpperCase(); // Standardize code format
+    console.log('Verifying code:', codeToVerify);
+    
+    // IMPORTANT CHANGE: Check localStorage FIRST before trying any API calls
+    // This ensures we check the same storage that the admin panel uses
     try {
-      const codeToVerify = code.trim().toUpperCase(); // Standardize code format
-      console.log('Verifying code:', codeToVerify);
+      // Direct localStorage check
+      console.log('Checking localStorage directly for code verification');
+      const storedCodes = localStorage.getItem('mockDb_codes');
       
-      // Show a loading message
+      if (storedCodes) {
+        const codes = JSON.parse(storedCodes);
+        console.log('Found codes in localStorage:', codes);
+        
+        // Case-insensitive comparison
+        const matchingCode = codes.find(c => 
+          c.code.toLowerCase() === codeToVerify.toLowerCase() && !c.used
+        );
+        
+        if (matchingCode) {
+          console.log('DIRECT MATCH FOUND IN LOCAL STORAGE:', matchingCode);
+          
+          // Mark as used directly in localStorage
+          matchingCode.used = true;
+          matchingCode.usedAt = new Date().toISOString();
+          localStorage.setItem('mockDb_codes', JSON.stringify(codes));
+          
+          // Show success message
+          setMessage('Access code verified successfully! Redirecting to game...');
+          setVerified(true);
+          
+          // Show success toast
+          toast.success(
+            <div>
+              <i className="fas fa-check-circle me-2"></i> Code verified successfully!
+            </div>,
+            { 
+              position: 'top-center',
+              autoClose: 2000,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              style: successToastStyle
+            }
+          );
+          
+          // Redirect to game after delay
+          setTimeout(() => {
+            window.location.href = gameUrl;
+          }, 2000);
+          
+          setLoading(false);
+          return;
+        } else {
+          // Check if code exists but is already used
+          const usedMatchingCode = codes.find(c => 
+            c.code.toLowerCase() === codeToVerify.toLowerCase() && c.used
+          );
+          
+          if (usedMatchingCode) {
+            console.log('Code found but already used:', usedMatchingCode);
+            setError('This code has already been used.');
+            
+            // Show error toast
+            toast.error(
+              <div>
+                <i className="fas fa-exclamation-triangle me-2"></i> Code already used!
+              </div>,
+              { 
+                position: 'top-center',
+                autoClose: 3000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+                progress: undefined,
+                style: errorToastStyle
+              }
+            );
+            
+            setLoading(false);
+            return;
+          }
+          
+          // If no code found at all, show invalid code error
+          console.log('No matching code found in localStorage');
+          setError('Invalid code. Please check and try again.');
+          
+          // Show error toast
+          toast.error(
+            <div>
+              <i className="fas fa-exclamation-triangle me-2"></i> Invalid code
+            </div>,
+            { 
+              position: 'top-center',
+              autoClose: 3000,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              style: errorToastStyle
+            }
+          );
+          
+          setLoading(false);
+          return;
+        }
+      } else {
+        console.log('No codes found in localStorage');
+      }
+      
+      // If we got here, the local storage check didn't work or didn't exist
+      // As a fallback, try the API verification
+      console.log('Falling back to API verification');
+      
+      // Show a loading message for API verification
       toast.info(
         <div>
           <i className="fas fa-spinner fa-spin me-2"></i> Verifying code...
         </div>,
         { 
           position: 'top-center',
-          autoClose: 1500, // Increased duration for slower networks
-          hideProgressBar: false,
-          closeOnClick: false,
-          pauseOnHover: false,
-          draggable: false,
-          progress: undefined 
+          autoClose: 1500,
+          hideProgressBar: false
         }
       );
       
-      // Try to verify with our retry mechanism
-      let res;
-      try {
-        res = await verifyCodeWithRetry(codeToVerify);
-      } catch (error) {
-        console.error('All verification attempts failed:', error);
-        
-        // If we're on a mobile device, try one more approach - look in localStorage
-        // This is a last resort fallback for offline scenarios
-        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-          console.log('Trying localStorage fallback for mobile device');
-          
-          try {
-            const storedCodes = localStorage.getItem('mockDb_codes');
-            if (storedCodes) {
-              const codes = JSON.parse(storedCodes);
-              const matchingCode = codes.find(c => 
-                c.code.toLowerCase() === codeToVerify.toLowerCase() && !c.used
-              );
-              
-              if (matchingCode) {
-                console.log('Found matching code in localStorage:', matchingCode);
-                // Mark as used in localStorage
-                matchingCode.used = true;
-                matchingCode.usedAt = new Date().toISOString();
-                localStorage.setItem('mockDb_codes', JSON.stringify(codes));
-                
-                // Craft response to match API
-                res = { 
-                  data: { 
-                    message: 'Code verified successfully (offline mode)' 
-                  } 
-                };
-              } else {
-                // Re-throw the original error if no matching code
-                throw error;
-              }
-            } else {
-              // Re-throw the original error if no stored codes
-              throw error;
-            }
-          } catch (localErr) {
-            // If localStorage approach failed too, throw the original error
-            console.error('localStorage fallback failed:', localErr);
-            throw error;
-          }
-        } else {
-          // Not on mobile, just throw the original error
-          throw error;
-        }
-      }
+      // Try the API verification as a backup
+      const response = await api.post('/codes/verify', { code: codeToVerify });
       
-      setMessage(res.data.message);
-      setError('');
-      setCode('');
-      
-      // Show enhanced success message
-      toast.success(
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <i className="fas fa-check-circle me-2" style={{ fontSize: '1.5rem' }}></i>
-            <strong>Success!</strong>
-          </div>
-          <div style={{ marginTop: '5px' }}>Code verified successfully!</div>
-          {res.data.message.includes('offline') && (
-            <div style={{ fontSize: '0.8rem', marginTop: '5px' }}>
-              <i className="fas fa-info-circle me-1"></i> 
-              Using offline mode due to connection issues
-            </div>
-          )}
-        </div>, 
-        {
-          position: 'top-center',
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          style: successToastStyle,
-          icon: false
-        }
-      );
-      
-      // Set verified to true
+      // If we got here, the API verification worked
+      setMessage('Access code verified successfully! Redirecting to game...');
       setVerified(true);
       
-      // Redirect to the game after a short delay (to show the toast)
-      setTimeout(() => {
-        window.location.href = gameUrl;
-      }, 3000);
-      
-    } catch (err) {
-      console.error('Final verification error:', err);
-      
-      let errorMsg = 'Invalid access code. Please try again.';
-      
-      if (err.response && err.response.data && err.response.data.message) {
-        errorMsg = err.response.data.message;
-      } else if (!err.response) {
-        errorMsg = 'Network error. Please check your connection and try again.';
-        
-        // Add more helpful information for mobile users
-        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-          errorMsg += ' Make sure you have a stable internet connection and try again.';
-        }
-      }
-      
-      setError(errorMsg);
-      setMessage('');
-      
-      // Show enhanced error message
-      toast.error(
+      // Show success toast
+      toast.success(
         <div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <i className="fas fa-exclamation-circle me-2" style={{ fontSize: '1.5rem' }}></i>
-            <strong>Error!</strong>
-          </div>
-          <div style={{ marginTop: '5px' }}>{errorMsg}</div>
-          {!err.response && (
-            <div style={{ marginTop: '8px', fontSize: '0.85rem' }}>
-              <i className="fas fa-wifi me-1"></i> 
-              Connection issue detected. Try again or check your internet connection.
-            </div>
-          )}
+          <i className="fas fa-check-circle me-2"></i> Code verified successfully!
         </div>,
-        {
+        { 
           position: 'top-center',
-          autoClose: 5000, // Longer time for error messages
+          autoClose: 2000,
           hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          style: errorToastStyle,
-          icon: false
+          style: successToastStyle
         }
       );
-    } finally {
-      setLoading(false);
+      
+      // Redirect to game after delay
+      setTimeout(() => {
+        window.location.href = gameUrl;
+      }, 2000);
+      
+    } catch (err) {
+      console.error('All verification methods failed:', err);
+      
+      // Show appropriate error message
+      if (err.response && err.response.status === 400) {
+        setError('This code has already been used.');
+        
+        // Show error toast
+        toast.error(
+          <div>
+            <i className="fas fa-exclamation-triangle me-2"></i> Code already used!
+          </div>,
+          { 
+            position: 'top-center',
+            autoClose: 3000,
+            hideProgressBar: false,
+            style: errorToastStyle
+          }
+        );
+      } else {
+        setError('Invalid code. Please check and try again.');
+        
+        // Show error toast
+        toast.error(
+          <div>
+            <i className="fas fa-exclamation-triangle me-2"></i> Invalid code
+          </div>,
+          { 
+            position: 'top-center',
+            autoClose: 3000,
+            hideProgressBar: false,
+            style: errorToastStyle
+          }
+        );
+      }
     }
+    
+    setLoading(false);
   };
 
   return (
