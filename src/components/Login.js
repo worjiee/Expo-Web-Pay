@@ -1,53 +1,85 @@
-import React, { useState } from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import config from '../config';
+import api from '../api/axios';
 
-function Login() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+// Hardcoded API URL to match the one in axios.js
+const API_URL = 'https://q-o6boqvomj-karls-projects-fccc69ea.vercel.app/api';
+
+const Login = () => {
+  const [formData, setFormData] = useState({
+    username: '',
+    password: ''
+  });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [fadeIn, setFadeIn] = useState(false);
   const navigate = useNavigate();
 
-  const apiUrl = process.env.REACT_APP_API_URL || config.API_URL;
-  console.log('Login component using API URL:', apiUrl);
+  useEffect(() => {
+    setFadeIn(true);
+    // Log the API URL on component mount
+    console.log('Login component mounted. Using API URL:', API_URL);
+  }, []);
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     setError('');
 
+    console.log('Attempting login with:', { username: formData.username });
+    console.log('Using API URL:', API_URL);
+    
     try {
-      console.log('Attempting login with:', { username });
-      console.log('Login request will be sent to:', `${apiUrl}/auth/login`);
-
-      const response = await axios.post(`${apiUrl}/auth/login`, {
-        username,
-        password
-      });
-
-      console.log('Login response:', response.data);
-
-      localStorage.setItem('token', response.data.token);
-      toast.success('Login successful!');
-      navigate('/admin-dashboard');
+      // Use the api instance from axios.js which has the correct baseURL
+      const res = await api.post('/auth/login', formData);
+      console.log('Login response:', res.data);
+      
+      if (res.data && res.data.token) {
+        localStorage.setItem('token', res.data.token);
+        toast.success('Login successful!');
+        navigate('/admin');
+      } else {
+        console.error('No token in response:', res.data);
+        throw new Error('No token received in response');
+      }
     } catch (err) {
       console.error('Login error:', err);
       
+      let errorMessage = 'Error logging in';
+      
       if (err.response) {
-        console.error('Error response:', err.response.data);
-        setError(err.response.data.message || 'Authentication failed');
-        toast.error(err.response.data.message || 'Authentication failed');
+        console.error('Server response:', err.response.data);
+        console.error('Response status:', err.response.status);
+        console.error('Response headers:', err.response.headers);
+        errorMessage = err.response.data.message || 'Invalid credentials';
       } else if (err.request) {
         console.error('No response received:', err.request);
-        setError('No response from server. Please check your connection.');
-        toast.error('No response from server. Please check your connection.');
+        errorMessage = 'No response from server. Please check your connection.';
       } else {
-        console.error('Request error:', err.message);
-        setError('Error setting up request. Please try again later.');
-        toast.error('Error setting up request. Please try again later.');
+        console.error('Error details:', err.message);
+        errorMessage = 'Error setting up request. Please try again.';
       }
+      
+      setError(errorMessage);
+      toast.error(errorMessage, {
+        position: 'top-right',
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -64,8 +96,9 @@ function Login() {
             <input
               type="text"
               id="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
               required
             />
           </div>
@@ -76,12 +109,13 @@ function Login() {
             <input
               type="password"
               id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
               required
             />
           </div>
-          <button type="submit" className="login-button">
+          <button type="submit" className="login-button" disabled={loading}>
             Login to Dashboard <i className="fas fa-sign-in-alt"></i>
           </button>
         </form>
