@@ -60,9 +60,26 @@ const Admin = () => {
 
   const generateCode = async () => {
     try {
-      const res = await api.post('/codes/generate');
-      setCodes([...codes, res.data]);
-      toast.success('Code generated successfully');
+      const response = await api.post('/codes/generate');
+      console.log('Generate code response:', response);
+      
+      // Make sure the response has the expected format
+      if (response && response.data) {
+        if (response.data.code) {
+          // If the API returns a single code object
+          setCodes(prevCodes => [...prevCodes, response.data.code]);
+        } else if (Array.isArray(response.data)) {
+          // If the API returns an array of codes
+          setCodes(prevCodes => [...prevCodes, ...response.data]);
+        } else {
+          // If we can't determine the format, fetch all codes
+          await fetchCodes();
+        }
+        toast.success('Code generated successfully');
+      } else {
+        console.error('Invalid response format:', response);
+        toast.error('Error generating code: Invalid response format');
+      }
     } catch (err) {
       console.error('Error generating code:', err);
       setError('Error generating code');
@@ -72,9 +89,26 @@ const Admin = () => {
 
   const generateMultipleCodes = async () => {
     try {
-      const res = await api.post('/codes/generate-multiple', { count: count });
-      setCodes([...codes, ...res.data]);
-      toast.success(`${count} codes generated successfully`);
+      const response = await api.post('/codes/generate-multiple', { count: count });
+      console.log('Generate multiple codes response:', response);
+      
+      // Make sure the response has the expected format
+      if (response && response.data) {
+        if (Array.isArray(response.data)) {
+          // If the API returns an array of codes
+          setCodes(prevCodes => [...prevCodes, ...response.data]);
+        } else if (response.data.codes && Array.isArray(response.data.codes)) {
+          // If the API returns an object with a codes array
+          setCodes(prevCodes => [...prevCodes, ...response.data.codes]);
+        } else {
+          // If we can't determine the format, fetch all codes
+          await fetchCodes();
+        }
+        toast.success(`${count} codes generated successfully`);
+      } else {
+        console.error('Invalid response format:', response);
+        toast.error('Error generating codes: Invalid response format');
+      }
     } catch (err) {
       console.error('Error generating multiple codes:', err);
       setError('Error generating codes');
