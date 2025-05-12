@@ -64,9 +64,10 @@ realApi.interceptors.response.use(
     // If this is a connection error, set the flag to use mock API
     if (!error.response) {
       console.warn('Connection issues detected. Will use mock API for future requests.');
-      // Only use mock API if we're not forcing real API
-      useMockAPI = !config.FORCE_REAL_API && true;
+      // Always set connection issues detected regardless of FORCE_REAL_API
       connectionIssuesDetected = true;
+      // Only use mock API if not forcing real API
+      useMockAPI = !config.FORCE_REAL_API && true;
     }
     
     if (error.response) {
@@ -134,7 +135,12 @@ const api = {
     // Always try to use real API for code verification first
     if (endpoint === '/codes/verify' && config.FORCE_REAL_API) {
       console.log('Forcing real API for code verification');
-      return await realApi.post(endpoint, data);
+      try {
+        return await realApi.post(endpoint, data);
+      } catch (err) {
+        console.error('Real API code verification failed:', err);
+        throw err; // Rethrow for code verification
+      }
     }
     
     // For login requests, always try both methods if needed
@@ -144,8 +150,9 @@ const api = {
         return await realApi.post(endpoint, data);
       } catch (err) {
         console.log('Real API login failed, trying mock API');
-        if (!config.FORCE_REAL_API) {
-          console.log('Falling back to mock login');
+        // Allow fallback to mock for login when admin fallback is enabled
+        if (config.ALLOW_ADMIN_FALLBACK && !err.response) {
+          console.log('Network error during login, falling back to mock login');
           return mockApi.post(endpoint, data);
         }
         throw err;
@@ -160,10 +167,13 @@ const api = {
     try {
       return await realApi.post(endpoint, data);
     } catch (err) {
-      // Only fall back to mock if not forcing real API
-      if (!config.FORCE_REAL_API && !err.response && connectionIssuesDetected) {
-        console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
-        return mockApi.post(endpoint, data);
+      // Fall back to mock for admin paths or when not forcing real API
+      if ((config.ALLOW_ADMIN_FALLBACK && window.location.pathname.includes('/admin')) || 
+          (!config.FORCE_REAL_API && connectionIssuesDetected)) {
+        if (!err.response) {
+          console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
+          return mockApi.post(endpoint, data);
+        }
       }
       throw err;
     }
@@ -173,7 +183,17 @@ const api = {
     // Always use real API for getting codes if real API is forced
     if (endpoint === '/codes' && config.FORCE_REAL_API) {
       console.log('Forcing real API for getting codes');
-      return await realApi.get(endpoint);
+      try {
+        return await realApi.get(endpoint);
+      } catch (err) {
+        console.error('Real API get codes failed:', err);
+        // Allow fallback for admin UI to show codes when admin fallback is enabled
+        if (config.ALLOW_ADMIN_FALLBACK && !err.response && window.location.pathname.includes('/admin')) {
+          console.log('Falling back to mock implementation for admin UI');
+          return mockApi.get(endpoint);
+        }
+        throw err;
+      }
     }
     
     if (useMockAPI && !config.FORCE_REAL_API) {
@@ -183,10 +203,13 @@ const api = {
     try {
       return await realApi.get(endpoint);
     } catch (err) {
-      // Only fall back to mock if not forcing real API
-      if (!config.FORCE_REAL_API && !err.response && connectionIssuesDetected) {
-        console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
-        return mockApi.get(endpoint);
+      // Fall back to mock for admin paths or when not forcing real API
+      if ((config.ALLOW_ADMIN_FALLBACK && window.location.pathname.includes('/admin')) || 
+          (!config.FORCE_REAL_API && connectionIssuesDetected)) {
+        if (!err.response) {
+          console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
+          return mockApi.get(endpoint);
+        }
       }
       throw err;
     }
@@ -200,10 +223,13 @@ const api = {
     try {
       return await realApi.delete(endpoint);
     } catch (err) {
-      // Only fall back to mock if not forcing real API
-      if (!config.FORCE_REAL_API && !err.response && connectionIssuesDetected) {
-        console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
-        return mockApi.delete(endpoint);
+      // Fall back to mock for admin paths or when not forcing real API
+      if ((config.ALLOW_ADMIN_FALLBACK && window.location.pathname.includes('/admin')) || 
+          (!config.FORCE_REAL_API && connectionIssuesDetected)) {
+        if (!err.response) {
+          console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
+          return mockApi.delete(endpoint);
+        }
       }
       throw err;
     }
