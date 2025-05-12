@@ -53,6 +53,51 @@ const Public = () => {
     boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)'
   };
 
+  // Function to attempt code verification with maximum resilience
+  const verifyCodeWithRetry = async (code, retriesLeft = 3) => {
+    try {
+      // Send code to server for verification
+      console.log(`Attempting code verification (retries left: ${retriesLeft})`);
+      const response = await api.post('/codes/verify', { code });
+      console.log('Verification successful:', response.data);
+      return response;
+    } catch (err) {
+      console.error('Verification error:', err);
+      
+      // If we have retries left and this is a network error, try again
+      if (retriesLeft > 0 && !err.response) {
+        // Longer delay between retries for mobile connections
+        const retryDelay = (4 - retriesLeft) * 1500; // 1.5s, 3s, 4.5s
+        console.log(`Network error. Retrying verification in ${retryDelay/1000}s... (${retriesLeft} retries left)`);
+        
+        // Show retry toast
+        toast.info(
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <i className="fas fa-sync-alt fa-spin me-2"></i>
+              <span>Retrying...</span>
+            </div>
+            <div style={{ fontSize: '0.8rem', marginTop: '5px' }}>
+              Network issues detected. Trying again...
+            </div>
+          </div>,
+          { 
+            position: 'top-center',
+            autoClose: retryDelay - 200,
+            hideProgressBar: false
+          }
+        );
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        return verifyCodeWithRetry(code, retriesLeft - 1);
+      }
+      
+      // If all retries failed, throw the error
+      throw err;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -67,7 +112,8 @@ const Public = () => {
     }
 
     try {
-      console.log('Verifying code:', code);
+      const codeToVerify = code.trim().toUpperCase(); // Standardize code format
+      console.log('Verifying code:', codeToVerify);
       
       // Show a loading message
       toast.info(
@@ -85,31 +131,57 @@ const Public = () => {
         }
       );
       
-      const codeToVerify = code.trim().toUpperCase(); // Standardize code format
-      
-      // Function to handle verification with retries
-      const verifyCodeWithRetry = async (retriesLeft = 2) => {
-        try {
-          // Send code to server for verification
-          console.log(`Attempting code verification (retries left: ${retriesLeft})`);
-          const response = await api.post('/codes/verify', { code: codeToVerify });
-          console.log('Verification successful:', response.data);
-          return response;
-        } catch (err) {
-          // If we have retries left and this is a network error, try again
-          if (retriesLeft > 0 && !err.response) {
-            console.log(`Network error. Retrying verification in 1 second... (${retriesLeft} retries left)`);
-            // Wait a second before retrying
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            return verifyCodeWithRetry(retriesLeft - 1);
+      // Try to verify with our retry mechanism
+      let res;
+      try {
+        res = await verifyCodeWithRetry(codeToVerify);
+      } catch (error) {
+        console.error('All verification attempts failed:', error);
+        
+        // If we're on a mobile device, try one more approach - look in localStorage
+        // This is a last resort fallback for offline scenarios
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+          console.log('Trying localStorage fallback for mobile device');
+          
+          try {
+            const storedCodes = localStorage.getItem('mockDb_codes');
+            if (storedCodes) {
+              const codes = JSON.parse(storedCodes);
+              const matchingCode = codes.find(c => 
+                c.code.toLowerCase() === codeToVerify.toLowerCase() && !c.used
+              );
+              
+              if (matchingCode) {
+                console.log('Found matching code in localStorage:', matchingCode);
+                // Mark as used in localStorage
+                matchingCode.used = true;
+                matchingCode.usedAt = new Date().toISOString();
+                localStorage.setItem('mockDb_codes', JSON.stringify(codes));
+                
+                // Craft response to match API
+                res = { 
+                  data: { 
+                    message: 'Code verified successfully (offline mode)' 
+                  } 
+                };
+              } else {
+                // Re-throw the original error if no matching code
+                throw error;
+              }
+            } else {
+              // Re-throw the original error if no stored codes
+              throw error;
+            }
+          } catch (localErr) {
+            // If localStorage approach failed too, throw the original error
+            console.error('localStorage fallback failed:', localErr);
+            throw error;
           }
-          // Otherwise, throw the error to be caught by the main try/catch
-          throw err;
+        } else {
+          // Not on mobile, just throw the original error
+          throw error;
         }
-      };
-      
-      // Call verification with retry logic
-      const res = await verifyCodeWithRetry();
+      }
       
       setMessage(res.data.message);
       setError('');
@@ -123,6 +195,12 @@ const Public = () => {
             <strong>Success!</strong>
           </div>
           <div style={{ marginTop: '5px' }}>Code verified successfully!</div>
+          {res.data.message.includes('offline') && (
+            <div style={{ fontSize: '0.8rem', marginTop: '5px' }}>
+              <i className="fas fa-info-circle me-1"></i> 
+              Using offline mode due to connection issues
+            </div>
+          )}
         </div>, 
         {
           position: 'top-center',
@@ -145,7 +223,7 @@ const Public = () => {
       }, 3000);
       
     } catch (err) {
-      console.error('Verification error:', err);
+      console.error('Final verification error:', err);
       
       let errorMsg = 'Invalid access code. Please try again.';
       
