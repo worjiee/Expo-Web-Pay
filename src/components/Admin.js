@@ -135,11 +135,14 @@ const Admin = () => {
     }
     
     try {
+      console.log(`Attempting to delete code with ID: ${id}`);
       await api.delete(`/codes/${id}`);
-      setCodes(codes.filter(code => code._id !== id));
+      
+      // Refresh the codes list after deletion
+      await fetchCodes();
       toast.success('Code deleted successfully');
-      fetchCodes();
     } catch (err) {
+      console.error('Error deleting code:', err);
       setError('Error deleting code');
       toast.error('Error deleting code');
     }
@@ -388,21 +391,21 @@ const Admin = () => {
                 </thead>
                 <tbody>
                   {codes.map((code) => (
-                    <tr key={code._id}>
+                    <tr key={code.id || code._id}>
                       <td>{code.code}</td>
                       <td>
-                        <span className={`badge ${code.isUsed ? 'bg-danger' : 'bg-success'}`}>
-                          {code.isUsed ? 'Used' : 'Available'}
+                        <span className={`badge ${code.used || code.isUsed ? 'bg-danger' : 'bg-success'}`}>
+                          {code.used || code.isUsed ? 'Used' : 'Available'}
                         </span>
                       </td>
-                      <td>{new Date(code.createdAt).toLocaleString()}</td>
+                      <td>{code.createdAt ? new Date(code.createdAt).toLocaleString() : 'Invalid Date'}</td>
                       <td>
                         {code.usedAt ? new Date(code.usedAt).toLocaleString() : 'Not used yet'}
                       </td>
                       <td>
                         <button 
                           className="btn btn-sm btn-danger" 
-                          onClick={() => deleteCode(code._id)}
+                          onClick={() => deleteCode(code.id || code._id)}
                         >
                           Delete
                         </button>
