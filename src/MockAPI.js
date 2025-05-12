@@ -144,10 +144,20 @@ const MockAPI = {
       // Standardize code format - convert to uppercase
       const standardizedCode = code.trim().toUpperCase();
       console.log('Standardized code for verification:', standardizedCode);
-      console.log('Available codes:', mockDb.codes);
+      
+      // Get the latest codes directly from localStorage to avoid any sync issues
+      let currentCodes = [];
+      try {
+        const storedCodes = localStorage.getItem('mockDb_codes');
+        currentCodes = storedCodes ? JSON.parse(storedCodes) : [];
+        console.log('Current codes from localStorage:', currentCodes);
+      } catch (err) {
+        console.error('Error getting codes from localStorage:', err);
+        currentCodes = mockDb.codes; // Fallback to memory if localStorage fails
+      }
       
       // Check if code exists and is not used - do a case-insensitive check
-      const codeRecord = mockDb.codes.find(c => 
+      const codeRecord = currentCodes.find(c => 
         c.code.toLowerCase() === standardizedCode.toLowerCase()
       );
       
@@ -156,51 +166,7 @@ const MockAPI = {
       if (!codeRecord) {
         console.error('Invalid code provided:', standardizedCode);
         
-        // Try one more sync with remote before failing
-        try {
-          console.log('Trying to sync with remote storage before failing verification');
-          await syncFromRemoteStorage();
-          
-          // Check again after syncing
-          const refreshedCodes = getStoredData();
-          const refreshedCodeRecord = refreshedCodes.find(c => 
-            c.code.toLowerCase() === standardizedCode.toLowerCase()
-          );
-          
-          if (refreshedCodeRecord) {
-            console.log('Found code after syncing:', refreshedCodeRecord);
-            
-            if (refreshedCodeRecord.used) {
-              console.error('Code found after sync but already used:', standardizedCode);
-              throw {
-                response: {
-                  status: 400,
-                  data: { message: 'Code already used' }
-                }
-              };
-            }
-            
-            // Mark code as used
-            refreshedCodeRecord.used = true;
-            refreshedCodeRecord.usedAt = new Date().toISOString();
-            storeData(refreshedCodes);
-            
-            // Sync the updated status
-            updateCodeStatus(refreshedCodeRecord.code, true);
-            
-            // Dispatch real-time update event
-            dispatchCodeEvent('code-used', refreshedCodeRecord);
-            
-            return {
-              data: {
-                message: 'Code verified successfully (after sync)'
-              }
-            };
-          }
-        } catch (syncErr) {
-          console.error('Sync attempt failed:', syncErr);
-        }
-        
+        // Return a simple error for invalid codes
         throw {
           response: {
             status: 404,
@@ -224,11 +190,15 @@ const MockAPI = {
       codeRecord.usedAt = new Date().toISOString();
       console.log('Code marked as used:', codeRecord);
       
-      // Store updated codes
-      storeData(mockDb.codes);
+      // Update the codeRecord in the array
+      const updatedCodes = currentCodes.map(c => 
+        c.code.toLowerCase() === standardizedCode.toLowerCase() ? codeRecord : c
+      );
       
-      // Also sync to remote storage to update all devices
-      updateCodeStatus(codeRecord.code, true);
+      // Store updated codes directly in localStorage and in memory
+      localStorage.setItem('mockDb_codes', JSON.stringify(updatedCodes));
+      mockDb.codes = updatedCodes;
+      console.log('Updated localStorage and memory with used code');
       
       // Dispatch real-time update event
       dispatchCodeEvent('code-used', codeRecord);
@@ -256,12 +226,21 @@ const MockAPI = {
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Generate a random 5-letter code
-      // This creates a random 5-letter uppercase code
       const randomCode = generateRandomCode();
       
+      // Get current codes from localStorage to ensure we have the latest
+      let currentCodes = [];
+      try {
+        const storedCodes = localStorage.getItem('mockDb_codes');
+        currentCodes = storedCodes ? JSON.parse(storedCodes) : [];
+      } catch (err) {
+        console.error('Error getting codes from localStorage:', err);
+        currentCodes = mockDb.codes; // Fallback
+      }
+      
       // Add to mock database
-      const newId = mockDb.codes.length > 0 
-        ? Math.max(...mockDb.codes.map(c => c.id)) + 1 
+      const newId = currentCodes.length > 0 
+        ? Math.max(...currentCodes.map(c => c.id)) + 1 
         : 1;
          
       const newCode = { 
@@ -271,12 +250,13 @@ const MockAPI = {
         createdAt: new Date().toISOString()
       };
       
-      mockDb.codes.push(newCode);
-      console.log('Generated new 5-letter code:', newCode);
-      console.log('Updated codes list:', mockDb.codes);
+      // Update both the in-memory mockDb and localStorage directly
+      const updatedCodes = [...currentCodes, newCode];
+      mockDb.codes = updatedCodes;
+      localStorage.setItem('mockDb_codes', JSON.stringify(updatedCodes));
       
-      // Store updated codes
-      storeData(mockDb.codes);
+      console.log('Generated new 5-letter code:', newCode);
+      console.log('Updated codes list in localStorage and memory');
       
       // Dispatch real-time update event for code generation
       dispatchCodeEvent('code-generated', newCode);
