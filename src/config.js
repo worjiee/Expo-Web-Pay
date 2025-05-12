@@ -5,9 +5,9 @@ const PRIMARY_API_URL = 'https://q-o6boqvomj-karls-projects-fccc69ea.vercel.app/
 // Use a different URL variant for backup to increase chances of one working
 const BACKUP_API_URL = 'https://q-2s9hee5w0-karls-projects-fccc69ea.vercel.app/api';
 
-// Force the use of real API for code verification to ensure cross-device compatibility
-// But allow fallback to mock API for admin functions when the API is unreachable
-const FORCE_REAL_API = true;
+// Force the use of mock API to avoid CORS issues on mobile devices
+// This is a temporary solution to make the app work on all devices
+const FORCE_REAL_API = false; // Set to false to use mock API
 const ALLOW_ADMIN_FALLBACK = true;
 const ALLOW_PUBLIC_FALLBACK = true; // Allow mock API for public code verification when all APIs fail
 

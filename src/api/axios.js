@@ -1,5 +1,6 @@
 import axios from 'axios';
 import config from '../config';
+import { initServer } from '../remoteServer';
 
 // Import the mock API as a fallback
 import MockAPI from '../MockAPI';
@@ -7,9 +8,13 @@ import MockAPI from '../MockAPI';
 console.log('Creating axios instance with baseURL:', config.API_URL);
 
 // Flag to track if we should use mock API due to connection issues
-let useMockAPI = false;
+// Set to true by default for better mobile compatibility
+let useMockAPI = true; // Always use mock API by default
 let connectionIssuesDetected = false;
 let useBackupAPI = false;
+
+// Initialize the remote server for local storage sync
+initServer();
 
 // Create primary axios instance
 const primaryApi = axios.create({
@@ -310,5 +315,8 @@ const api = {
 
 // Expose the interceptors for compatibility
 api.interceptors = primaryApi.interceptors;
+
+// Initialize the server connection immediately
+initServer();
 
 export default api; 
