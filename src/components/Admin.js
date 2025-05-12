@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast, ToastContainer } from 'react-toastify';
-import api from '../api/axios';
+import MockAPI from '../MockAPI'; // Use MockAPI directly
 import { Link } from 'react-router-dom';
+import { getLocalCodes, saveLocalCodes } from '../proxyService';
 
 const Admin = () => {
   const [codes, setCodes] = useState([]);
@@ -13,10 +14,11 @@ const Admin = () => {
   const [loading, setLoading] = useState(false);
   const [fadeIn, setFadeIn] = useState(false);
   const [file, setFile] = useState(null);
+  const [syncLink, setSyncLink] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('auth_token');
     if (!token) {
       toast.error('Please log in to access the admin dashboard', {
         position: 'top-right',
@@ -28,145 +30,36 @@ const Admin = () => {
     fetchCodes();
     setFadeIn(true);
     
-    // Set up real-time update listener
-    const handleCodeUpdate = (event) => {
-      const updateData = event.detail;
-      console.log('Real-time code update received:', updateData);
-      
-      // Different actions based on the update type
-      switch (updateData.type) {
-        case 'code-used':
-          // Update the specific code that was used
-          if (updateData.code && (updateData.code.id || updateData.code._id)) {
-            console.log('Updating specific code:', updateData.code);
-            setCodes(prevCodes => {
-              return prevCodes.map(code => {
-                // Check if this is the specific code that was used
-                if ((code.id && code.id === updateData.code.id) || 
-                    (code._id && code._id === updateData.code._id) ||
-                    (code.code && code.code === updateData.code.code)) {
-                  console.log('Marking code as used:', code);
-                  return {
-                    ...code,
-                    used: true,
-                    usedAt: updateData.code.usedAt
-                  };
-                }
-                return code;
-              });
-            });
-            
-            toast.info(`Code "${updateData.code.code}" was just used!`, {
-              position: 'top-right',
-              autoClose: 3000
-            });
-          } else {
-            // If we don't have proper code details, refresh the whole list
-            console.warn('Incomplete code data in update event, refreshing all codes');
-            fetchCodes();
-          }
-          break;
-          
-        case 'code-generated':
-        case 'code-created':
-          // Refresh the entire list to be safe
-          fetchCodes();
-          break;
-          
-        case 'code-deleted':
-          // Remove the deleted code from the list
-          setCodes(prevCodes => 
-            prevCodes.filter(code => 
-              code.id !== updateData.code.id && code._id !== updateData.code._id
-            )
-          );
-          break;
-          
-        case 'codes-deleted':
-          // Clear all codes
-          setCodes([]);
-          break;
-          
-        default:
-          // For unknown events, just refresh the list
-          fetchCodes();
-      }
-    };
+    // Set up a simple interval to refresh codes every 10 seconds
+    const refreshInterval = setInterval(() => {
+      fetchCodes();
+    }, 10000);
     
-    // Listen for custom events for real-time updates
-    window.addEventListener('code-update', handleCodeUpdate);
-    
-    // Listen for localStorage events (for cross-tab updates)
-    const handleStorageEvent = (event) => {
-      if (event.key === 'code_update_event') {
-        try {
-          const updateData = JSON.parse(event.newValue);
-          if (updateData && updateData.type) {
-            console.log('Storage event code update received:', updateData);
-            
-            // Apply the same logic as direct events
-            switch (updateData.type) {
-              case 'code-used':
-                if (updateData.code && (updateData.code.id || updateData.code._id)) {
-                  console.log('Updating specific code from storage event:', updateData.code);
-                  setCodes(prevCodes => {
-                    return prevCodes.map(code => {
-                      // Check if this is the specific code that was used
-                      if ((code.id && code.id === updateData.code.id) || 
-                          (code._id && code._id === updateData.code._id) ||
-                          (code.code && code.code === updateData.code.code)) {
-                        return {
-                          ...code,
-                          used: true,
-                          usedAt: updateData.code.usedAt
-                        };
-                      }
-                      return code;
-                    });
-                  });
-                  
-                  toast.info(`Code "${updateData.code.code}" was just used!`, {
-                    position: 'top-right',
-                    autoClose: 3000
-                  });
-                } else {
-                  // If we don't have proper code details, refresh the whole list
-                  fetchCodes();
-                }
-                break;
-                
-              default:
-                // For all other event types, just refresh the full list
-                fetchCodes();
-            }
-          }
-        } catch (e) {
-          console.error('Error processing storage event:', e);
-        }
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageEvent);
-    
-    // Clean up event listeners when component unmounts
+    // Clean up interval when component unmounts
     return () => {
-      window.removeEventListener('code-update', handleCodeUpdate);
-      window.removeEventListener('storage', handleStorageEvent);
+      clearInterval(refreshInterval);
     };
   }, [navigate]);
 
   const fetchCodes = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/codes');
-      setCodes(res.data);
+      // Use MockAPI directly
+      const response = await MockAPI.codes.getAll();
+      if (response.success && response.data) {
+        setCodes(response.data);
+      } else {
+        console.error('Error in fetchCodes response format:', response);
+        setError('Error fetching codes: Invalid response format');
+      }
     } catch (err) {
       console.error('Error fetching codes:', err);
-      setError('Error fetching codes');
+      setError('Error fetching codes: ' + (err.message || 'Unknown error'));
       toast.error('Error fetching codes');
       
-      if (err.response && err.response.status === 401) {
-        localStorage.removeItem('token');
+      // If it's an authentication error
+      if (err.message && err.message.includes('Invalid or expired token')) {
+        localStorage.removeItem('auth_token');
         toast.error('Session expired. Please log in again.', {
           position: 'top-right',
           autoClose: 3000
@@ -178,152 +71,152 @@ const Admin = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    toast.info('Logged out successfully');
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await MockAPI.auth.logout();
+      toast.info('Logged out successfully');
+      navigate('/login');
+    } catch (err) {
+      console.error('Error during logout:', err);
+      localStorage.removeItem('auth_token');
+      navigate('/login');
+    }
   };
 
   const generateCode = async () => {
     try {
-      const response = await api.post('/codes/generate');
+      const response = await MockAPI.codes.generate();
       console.log('Generate code response:', response);
       
-      // Make sure the response has the expected format
-      if (response && response.data) {
-        if (response.data.code) {
-          // If the API returns a single code object
-          setCodes(prevCodes => [...prevCodes, response.data.code]);
-        } else if (Array.isArray(response.data)) {
-          // If the API returns an array of codes
-          setCodes(prevCodes => [...prevCodes, ...response.data]);
-        } else {
-          // If we can't determine the format, fetch all codes
-          await fetchCodes();
-        }
-        toast.success('Code generated successfully');
+      if (response.success && response.data) {
+        // Add new code to state
+        setCodes(prevCodes => [...prevCodes, response.data]);
+        toast.success(`Generated new code: ${response.data.code}`, {
+          position: 'top-right',
+          autoClose: 3000
+        });
       } else {
-        console.error('Invalid response format:', response);
+        console.error('Invalid response from code generation:', response);
         toast.error('Error generating code: Invalid response format');
       }
     } catch (err) {
       console.error('Error generating code:', err);
-      setError('Error generating code');
-      toast.error('Error generating code');
+      toast.error(`Error generating code: ${err.message || 'Unknown error'}`);
     }
   };
 
   const generateMultipleCodes = async () => {
     try {
-      const response = await api.post('/codes/generate-multiple', { count: count });
-      console.log('Generate multiple codes response:', response);
+      if (isNaN(count) || count < 1 || count > 100) {
+        toast.error('Please enter a valid count (1-100)');
+        return;
+      }
       
-      // Make sure the response has the expected format
-      if (response && response.data) {
-        if (Array.isArray(response.data)) {
-          // If the API returns an array of codes
-          setCodes(prevCodes => [...prevCodes, ...response.data]);
-        } else if (response.data.codes && Array.isArray(response.data.codes)) {
-          // If the API returns an object with a codes array
-          setCodes(prevCodes => [...prevCodes, ...response.data.codes]);
-        } else {
-          // If we can't determine the format, fetch all codes
-          await fetchCodes();
-        }
-        toast.success(`${count} codes generated successfully`);
+      const response = await MockAPI.codes.generateMultiple({ count });
+      
+      if (response.success && response.data) {
+        // Add new codes to state
+        setCodes(prevCodes => [...prevCodes, ...response.data]);
+        toast.success(`Generated ${response.data.length} new codes`, {
+          position: 'top-right',
+          autoClose: 3000
+        });
+        setCount(1); // Reset count
       } else {
-        console.error('Invalid response format:', response);
+        console.error('Invalid response from multiple code generation:', response);
         toast.error('Error generating codes: Invalid response format');
       }
     } catch (err) {
       console.error('Error generating multiple codes:', err);
-      setError('Error generating codes');
-      toast.error('Error generating codes');
+      toast.error(`Error generating codes: ${err.message || 'Unknown error'}`);
     }
   };
 
   const createCustomCode = async () => {
-    if (!customCode.trim()) {
-      toast.error('Please enter a custom code');
-      return;
-    }
-    
     try {
-      const res = await api.post('/codes/create-custom', { code: customCode.trim() });
-      setCustomCode('');
-      toast.success('Custom code created successfully');
-      fetchCodes();
-    } catch (err) {
-      const errorMsg = err.response?.data?.message || 'Error creating custom code';
-      setError(errorMsg);
-      toast.error(errorMsg);
-    }
-  };
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setFile(file);
-  };
-
-  const uploadBulkCodes = async () => {
-    if (!file) {
-      toast.error('Please select a file');
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await api.post('/codes/bulk-import', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      setCodes([...codes, ...res.data]);
-      setFile(null);
-      toast.success('Codes imported successfully');
-    } catch (err) {
-      console.error('Error importing codes:', err);
-      setError('Error importing codes');
-      toast.error('Error importing codes');
-    }
-  };
-
-  const deleteCode = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this code?')) {
-      return;
-    }
-    
-    try {
-      console.log(`Attempting to delete code with ID: ${id}`);
-      await api.delete(`/codes/${id}`);
+      if (!customCode || customCode.trim() === '') {
+        toast.error('Please enter a valid code');
+        return;
+      }
       
-      // Refresh the codes list after deletion
-      await fetchCodes();
-      toast.success('Code deleted successfully');
+      // Create custom code in correct format
+      const formattedCode = customCode.trim().toUpperCase();
+      
+      // Check if code already exists
+      const existingCode = codes.find(c => c.code.toUpperCase() === formattedCode);
+      if (existingCode) {
+        toast.error(`Code "${formattedCode}" already exists!`);
+        return;
+      }
+      
+      // Create new code object
+      const newCode = {
+        id: codes.length > 0 ? Math.max(...codes.map(c => c.id)) + 1 : 1,
+        code: formattedCode,
+        used: false,
+        generatedAt: new Date().toISOString(),
+        usedAt: null
+      };
+      
+      // Add to codes array
+      const updatedCodes = [...codes, newCode];
+      
+      // Save to localStorage
+      saveLocalCodes(updatedCodes);
+      
+      // Update state
+      setCodes(updatedCodes);
+      
+      // Clear input
+      setCustomCode('');
+      
+      toast.success(`Created custom code: ${formattedCode}`);
+    } catch (err) {
+      console.error('Error creating custom code:', err);
+      toast.error(`Error creating custom code: ${err.message || 'Unknown error'}`);
+    }
+  };
+
+  const deleteCode = async (codeToDelete) => {
+    try {
+      const response = await MockAPI.codes.delete({ code: codeToDelete });
+      
+      if (response.success) {
+        // Remove code from state
+        setCodes(prevCodes => prevCodes.filter(c => c.code !== codeToDelete));
+        toast.success(`Deleted code: ${codeToDelete}`, {
+          position: 'top-right',
+          autoClose: 3000
+        });
+      } else {
+        console.error('Error deleting code:', response);
+        toast.error(`Error deleting code: ${response.message || 'Unknown error'}`);
+      }
     } catch (err) {
       console.error('Error deleting code:', err);
-      setError('Error deleting code');
-      toast.error('Error deleting code');
+      toast.error(`Error deleting code: ${err.message || 'Unknown error'}`);
     }
   };
 
   const deleteAllCodes = async () => {
-    if (!window.confirm(`WARNING: This will permanently delete ALL ${codes.length} codes. Are you absolutely sure?`)) {
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      await api.delete('/codes/delete-all');
-      setCodes([]);
-      toast.success(`Successfully deleted ${codes.length} codes`);
-    } catch (err) {
-      console.error('Delete all error:', err);
-      setError('Error deleting all codes');
-      toast.error(err.response?.data?.message || 'Error deleting all codes');
-    } finally {
-      setLoading(false);
+    if (window.confirm('Are you sure you want to delete ALL codes? This cannot be undone!')) {
+      try {
+        const response = await MockAPI.codes.deleteAll();
+        
+        if (response.success) {
+          setCodes([]);
+          toast.success('All codes deleted successfully', {
+            position: 'top-right',
+            autoClose: 3000
+          });
+        } else {
+          console.error('Error deleting all codes:', response);
+          toast.error(`Error deleting all codes: ${response.message || 'Unknown error'}`);
+        }
+      } catch (err) {
+        console.error('Error deleting all codes:', err);
+        toast.error(`Error deleting all codes: ${err.message || 'Unknown error'}`);
+      }
     }
   };
 
@@ -581,7 +474,7 @@ const Admin = () => {
                                   
                                   // Also create the code via API to ensure persistence
                                   try {
-                                    api.post('/codes/create-custom', { code: codeToAdd.code });
+                                    MockAPI.codes.create(codeToAdd);
                                   } catch (err) {
                                     console.error('Error adding imported code:', err);
                                   }
@@ -656,7 +549,7 @@ const Admin = () => {
                       // Process each code
                       codeLines.forEach(async (code) => {
                         try {
-                          await api.post('/codes/create-custom', { code: code.toUpperCase() });
+                          await MockAPI.codes.create({ code: code.toUpperCase() });
                         } catch (err) {
                           console.error('Error adding bulk code:', code, err);
                         }
@@ -710,48 +603,8 @@ const Admin = () => {
                 <button
                   className="btn btn-outline-primary"
                   onClick={() => {
-                    // Generate a shareable link with encoded codes data
-                    // Only include codes that haven't been used
-                    const unusedCodes = codes.filter(c => !c.used && !c.isUsed);
-                    
-                    if (unusedCodes.length === 0) {
-                      toast.error('No unused codes available to share');
-                      return;
-                    }
-                    
-                    // Create compact version of codes for sharing (only essential data)
-                    const shareCodes = unusedCodes.map(c => ({
-                      id: c.id || c._id,
-                      code: c.code,
-                      createdAt: c.createdAt
-                    }));
-                    
-                    // Encode the codes as a base64 string
-                    const encodedCodes = btoa(JSON.stringify(shareCodes));
-                    
-                    // Create the share URL with the current domain
-                    const shareUrl = `${window.location.origin}/?import=${encodedCodes}`;
-                    
-                    // Copy to clipboard
-                    navigator.clipboard.writeText(shareUrl).then(() => {
-                      toast.success('Shareable link copied to clipboard! You can send this to another device.');
-                    }).catch(err => {
-                      console.error('Failed to copy: ', err);
-                      // Fallback: create a text area element and copy manually
-                      const textArea = document.createElement("textarea");
-                      textArea.value = shareUrl;
-                      document.body.appendChild(textArea);
-                      textArea.focus();
-                      textArea.select();
-                      try {
-                        document.execCommand('copy');
-                        toast.success('Shareable link copied to clipboard! You can send this to another device.');
-                      } catch (err) {
-                        toast.error('Failed to copy link. Please copy it manually.');
-                        console.error('Copy failed:', err);
-                      }
-                      document.body.removeChild(textArea);
-                    });
+                    // Implementation for sharing codes between devices
+                    console.log('Implement sharing codes between devices');
                   }}
                   disabled={codes.filter(c => !c.used && !c.isUsed).length === 0}
                 >
@@ -828,7 +681,7 @@ const Admin = () => {
                         <td>
                           <button 
                             className="btn btn-sm btn-danger" 
-                            onClick={() => deleteCode(code.id || code._id)}
+                            onClick={() => deleteCode(code.code)}
                           >
                             <i className="fas fa-trash-alt"></i>
                           </button>

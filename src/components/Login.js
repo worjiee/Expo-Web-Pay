@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import api from '../api/axios';
+import MockAPI from '../MockAPI'; // Use MockAPI directly
 import config from '../config';
 
 const Login = () => {
@@ -18,11 +18,9 @@ const Login = () => {
 
   useEffect(() => {
     setFadeIn(true);
-    // Log the API URL on component mount
-    console.log('Login component mounted. Using API URL:', config.API_URL);
     
     // Check if user is already logged in
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('auth_token');
     if (token) {
       console.log('Token already exists, redirecting to admin');
       navigate('/admin');
@@ -47,22 +45,19 @@ const Login = () => {
     console.log('Attempting login with username:', formData.username);
     
     try {
-      console.log('Making login request to API with fallback...');
-      
       // Show loading toast
       toast.info('Logging in...', {
         position: 'top-right',
         autoClose: 2000
       });
       
-      // Try to login
-      const res = await api.post('/auth/login', formData);
-      console.log('Login response:', res.data);
+      // Use MockAPI directly for login
+      const response = await MockAPI.auth.login(formData);
+      console.log('Login response:', response);
       
-      if (res.data && res.data.token) {
-        // Store token
-        localStorage.setItem('token', res.data.token);
-        console.log('Token stored in localStorage');
+      if (response.success && response.token) {
+        // Token is already stored in localStorage by MockAPI
+        console.log('Login successful, token stored');
         
         // Show success message
         toast.success('Login successful!', {
@@ -73,27 +68,14 @@ const Login = () => {
         // Redirect to admin page
         navigate('/admin');
       } else {
-        console.error('Invalid response format - no token in response:', res.data);
+        console.error('Invalid response format - unexpected response:', response);
         setError('Invalid response from server');
         toast.error('Server error: Invalid response format');
       }
     } catch (err) {
       console.error('Login error:', err);
       
-      let errorMessage = 'Error logging in';
-      
-      if (err.response) {
-        console.error('Server response error:', err.response.data);
-        console.error('Response status:', err.response.status);
-        errorMessage = err.response.data?.message || 'Invalid username or password';
-      } else if (err.request) {
-        console.error('No response received:', err.request);
-        errorMessage = 'No response from server. Please check your connection.';
-        setConnectionError(true);
-      } else {
-        console.error('Error setting up request:', err.message);
-        errorMessage = 'Error connecting to server. Please try again.';
-      }
+      let errorMessage = err.message || 'Invalid username or password';
       
       setError(errorMessage);
       toast.error(errorMessage, {
@@ -102,18 +84,6 @@ const Login = () => {
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Debug function to check local storage
-  const debugLocalStorage = () => {
-    try {
-      const token = localStorage.getItem('token');
-      console.log('Current token in localStorage:', token);
-      return true;
-    } catch (err) {
-      console.error('Error accessing localStorage:', err);
-      return false;
     }
   };
 
@@ -181,12 +151,6 @@ const Login = () => {
                 {error && 
                   <div className={`alert ${connectionError ? 'alert-warning' : 'alert-danger'}`}>
                     {error}
-                    {connectionError && (
-                      <div className="mt-2 small">
-                        <strong>Note:</strong> If this is your first login attempt, the server might be starting up. 
-                        Please wait a moment and try again.
-                      </div>
-                    )}
                   </div>
                 }
                 
@@ -245,7 +209,7 @@ const Login = () => {
                     )}
                   </button>
                   
-                  {/* Help text for troubleshooting */}
+                  {/* Help text */}
                   <div className="text-center mt-3">
                     <small className="text-muted">
                       <i className="fas fa-info-circle me-1"></i>
@@ -256,21 +220,35 @@ const Login = () => {
               </div>
             </div>
             
-            <div className="text-center mt-4">
-              <div className="footer-contact p-3 bg-light rounded">
-                <p className="mb-0">
-                  <i className="fas fa-question-circle me-2 text-primary"></i>
-                  Need help? Contact <a href="mailto:sacayan.karl@gmail.com" className="text-primary">administrator</a>
-                </p>
-                <p className="mt-2 mb-0 text-muted small">
-                  <i className="fas fa-copyright me-1"></i> 2023 End of The Road Game. All rights reserved.
-                </p>
+            <div className="card mt-4 shadow-sm">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <i className="fas fa-question-circle text-info me-3" style={{ fontSize: '2rem' }}></i>
+                  <div>
+                    <h5 className="mb-1">Need help?</h5>
+                    <p className="mb-0 small text-muted">
+                      This is a demo application for managing access codes. Use the default credentials to log in.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-      <ToastContainer position="top-right" autoClose={3000} />
+
+      <ToastContainer />
+      
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        
+        .fadeIn {
+          animation: fadeIn 0.5s ease-in-out;
+        }
+      `}</style>
     </>
   );
 };
