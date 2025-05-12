@@ -9,77 +9,112 @@ console.log('Creating axios instance with baseURL:', config.API_URL);
 // Flag to track if we should use mock API due to connection issues
 let useMockAPI = false;
 let connectionIssuesDetected = false;
+let useBackupAPI = false;
 
-// Create real axios instance
-const realApi = axios.create({
+// Create primary axios instance
+const primaryApi = axios.create({
   baseURL: config.API_URL,
   headers: {
     'Content-Type': 'application/json'
   },
   withCredentials: false,
-  timeout: 15000 // 15 second timeout to allow for slower connections
+  timeout: config.CODE_VERIFICATION_TIMEOUT // Use configured timeout
 });
 
-// Add a request interceptor for authentication
-realApi.interceptors.request.use(
-  (config) => {
-    console.log('Making request to:', config.url);
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
-    return config;
+// Create backup axios instance
+const backupApi = axios.create({
+  baseURL: config.BACKUP_API_URL,
+  headers: {
+    'Content-Type': 'application/json'
   },
-  (error) => {
-    console.error('Request error:', error);
-    return Promise.reject(error);
-  }
-);
+  withCredentials: false,
+  timeout: config.CODE_VERIFICATION_TIMEOUT // Use configured timeout
+});
 
-// Add a response interceptor for error handling
-realApi.interceptors.response.use(
-  (response) => {
-    console.log('Response received:', response.status);
-    // If we get a successful response, reset the mock API flag
-    useMockAPI = !config.FORCE_REAL_API && false;
-    return response;
-  },
-  (error) => {
-    console.error('Response error:', error);
-    
-    // Handle authentication errors
-    if (error.response && error.response.status === 401) {
-      console.warn('Authentication error detected. User may need to log in again.');
-      
-      // If not on login page, clear token
-      if (window.location.pathname !== '/login') {
-        console.log('Clearing token due to auth error');
-        localStorage.removeItem('token');
-        
-        // Redirect to login if not already there
-        window.location.href = '/login';
+// Function to get the appropriate real API instance
+const getRealApi = () => {
+  return useBackupAPI ? backupApi : primaryApi;
+};
+
+// Add a request interceptor for authentication to both instances
+[primaryApi, backupApi].forEach(api => {
+  api.interceptors.request.use(
+    (config) => {
+      console.log('Making request to:', config.url, 'using', useBackupAPI ? 'backup API' : 'primary API');
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
       }
+      return config;
+    },
+    (error) => {
+      console.error('Request error:', error);
+      return Promise.reject(error);
     }
-    
-    // If this is a connection error, set the flag to use mock API
-    if (!error.response) {
-      console.warn('Connection issues detected. Will use mock API for future requests.');
-      // Always set connection issues detected regardless of FORCE_REAL_API
-      connectionIssuesDetected = true;
-      // Only use mock API if not forcing real API
-      useMockAPI = !config.FORCE_REAL_API && true;
+  );
+
+  // Add a response interceptor for error handling
+  api.interceptors.response.use(
+    (response) => {
+      console.log('Response received:', response.status, 'from', useBackupAPI ? 'backup API' : 'primary API');
+      // If we get a successful response, reset the mock API flag
+      useMockAPI = !config.FORCE_REAL_API && false;
+      
+      // If we're using the backup API and it worked, we might want to try the primary again later
+      if (useBackupAPI) {
+        console.log('Backup API worked. Will try primary API again later.');
+        // After a successful backup API call, schedule a check to try primary again
+        setTimeout(() => {
+          useBackupAPI = false;
+          console.log('Switched back to primary API for future requests');
+        }, 60000); // Try primary API again after 1 minute
+      }
+      
+      return response;
+    },
+    (error) => {
+      console.error('Response error:', error);
+      
+      // Handle authentication errors
+      if (error.response && error.response.status === 401) {
+        console.warn('Authentication error detected. User may need to log in again.');
+        
+        // If not on login page, clear token
+        if (window.location.pathname !== '/login') {
+          console.log('Clearing token due to auth error');
+          localStorage.removeItem('token');
+          
+          // Redirect to login if not already there
+          window.location.href = '/login';
+        }
+      }
+      
+      // If this is a connection error, set the flag to use mock API
+      if (!error.response) {
+        console.warn('Connection issues detected with', useBackupAPI ? 'backup API' : 'primary API');
+        // Always set connection issues detected regardless of FORCE_REAL_API
+        connectionIssuesDetected = true;
+        // Only use mock API if not forcing real API
+        useMockAPI = !config.FORCE_REAL_API && true;
+        
+        // If this is the primary API failing, we should try the backup next
+        if (!useBackupAPI) {
+          console.log('Will try backup API for next request');
+          useBackupAPI = true;
+        }
+      }
+      
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+      } else if (error.request) {
+        console.error('No response received:', error.request);
+      } else {
+        console.error('Error setting up request:', error.message);
+      }
+      return Promise.reject(error);
     }
-    
-    if (error.response) {
-      console.error('Error response:', error.response.data);
-    } else if (error.request) {
-      console.error('No response received:', error.request);
-    } else {
-      console.error('Error setting up request:', error.message);
-    }
-    return Promise.reject(error);
-  }
-);
+  );
+});
 
 // Create the mock API implementation
 const mockApi = {
@@ -129,29 +164,75 @@ const mockApi = {
   }
 };
 
+// Helper function to determine if fallback to mock is allowed
+const shouldAllowMockFallback = (endpoint) => {
+  // For login requests, check if admin fallback is enabled
+  if (endpoint === '/auth/login') {
+    return config.ALLOW_ADMIN_FALLBACK;
+  }
+  
+  // For admin pages, check if admin fallback is enabled
+  if (window.location.pathname.includes('/admin')) {
+    return config.ALLOW_ADMIN_FALLBACK;
+  }
+  
+  // For code verification, check if public fallback is enabled
+  if (endpoint === '/codes/verify') {
+    return config.ALLOW_PUBLIC_FALLBACK;
+  }
+  
+  // Default to not forcing real API
+  return !config.FORCE_REAL_API;
+};
+
 // Hybrid API that tries real API first, then falls back to mock if needed
 const api = {
   post: async (endpoint, data) => {
-    // Always try to use real API for code verification first
-    if (endpoint === '/codes/verify' && config.FORCE_REAL_API) {
-      console.log('Forcing real API for code verification');
+    // For code verification requests, try both APIs before giving up
+    if (endpoint === '/codes/verify') {
+      console.log('Handling code verification with resilient approach');
+      
+      // Try primary API
       try {
-        return await realApi.post(endpoint, data);
-      } catch (err) {
-        console.error('Real API code verification failed:', err);
-        throw err; // Rethrow for code verification
+        console.log('Trying primary API for code verification');
+        const response = await primaryApi.post(endpoint, data);
+        console.log('Primary API code verification succeeded');
+        return response;
+      } catch (primaryErr) {
+        console.error('Primary API code verification failed:', primaryErr);
+        
+        // Try backup API
+        try {
+          console.log('Trying backup API for code verification');
+          const response = await backupApi.post(endpoint, data);
+          console.log('Backup API code verification succeeded');
+          // Set useBackupAPI to true for future requests
+          useBackupAPI = true;
+          return response;
+        } catch (backupErr) {
+          console.error('Backup API code verification failed:', backupErr);
+          
+          // If mock fallback is allowed for public, use it
+          if (config.ALLOW_PUBLIC_FALLBACK) {
+            console.log('Falling back to mock implementation for code verification');
+            return mockApi.post(endpoint, data);
+          }
+          
+          // Otherwise, rethrow the backup error
+          throw backupErr;
+        }
       }
     }
     
     // For login requests, always try both methods if needed
     if (endpoint === '/auth/login') {
       try {
-        console.log('Trying real API login first');
-        return await realApi.post(endpoint, data);
+        console.log('Trying real API login');
+        return await getRealApi().post(endpoint, data);
       } catch (err) {
-        console.log('Real API login failed, trying mock API');
+        console.log('Real API login failed');
         // Allow fallback to mock for login when admin fallback is enabled
-        if (config.ALLOW_ADMIN_FALLBACK && !err.response) {
+        if (shouldAllowMockFallback(endpoint) && !err.response) {
           console.log('Network error during login, falling back to mock login');
           return mockApi.post(endpoint, data);
         }
@@ -165,30 +246,27 @@ const api = {
     }
     
     try {
-      return await realApi.post(endpoint, data);
+      return await getRealApi().post(endpoint, data);
     } catch (err) {
       // Fall back to mock for admin paths or when not forcing real API
-      if ((config.ALLOW_ADMIN_FALLBACK && window.location.pathname.includes('/admin')) || 
-          (!config.FORCE_REAL_API && connectionIssuesDetected)) {
-        if (!err.response) {
-          console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
-          return mockApi.post(endpoint, data);
-        }
+      if (shouldAllowMockFallback(endpoint) && !err.response && connectionIssuesDetected) {
+        console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
+        return mockApi.post(endpoint, data);
       }
       throw err;
     }
   },
   
   get: async (endpoint) => {
-    // Always use real API for getting codes if real API is forced
-    if (endpoint === '/codes' && config.FORCE_REAL_API) {
-      console.log('Forcing real API for getting codes');
+    // Special handling for getting codes in admin
+    if (endpoint === '/codes' && window.location.pathname.includes('/admin')) {
+      console.log('Getting codes for admin dashboard');
       try {
-        return await realApi.get(endpoint);
+        return await getRealApi().get(endpoint);
       } catch (err) {
         console.error('Real API get codes failed:', err);
         // Allow fallback for admin UI to show codes when admin fallback is enabled
-        if (config.ALLOW_ADMIN_FALLBACK && !err.response && window.location.pathname.includes('/admin')) {
+        if (config.ALLOW_ADMIN_FALLBACK && !err.response) {
           console.log('Falling back to mock implementation for admin UI');
           return mockApi.get(endpoint);
         }
@@ -201,15 +279,12 @@ const api = {
     }
     
     try {
-      return await realApi.get(endpoint);
+      return await getRealApi().get(endpoint);
     } catch (err) {
-      // Fall back to mock for admin paths or when not forcing real API
-      if ((config.ALLOW_ADMIN_FALLBACK && window.location.pathname.includes('/admin')) || 
-          (!config.FORCE_REAL_API && connectionIssuesDetected)) {
-        if (!err.response) {
-          console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
-          return mockApi.get(endpoint);
-        }
+      // Fall back to mock with appropriate permissions
+      if (shouldAllowMockFallback(endpoint) && !err.response && connectionIssuesDetected) {
+        console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
+        return mockApi.get(endpoint);
       }
       throw err;
     }
@@ -221,15 +296,12 @@ const api = {
     }
     
     try {
-      return await realApi.delete(endpoint);
+      return await getRealApi().delete(endpoint);
     } catch (err) {
-      // Fall back to mock for admin paths or when not forcing real API
-      if ((config.ALLOW_ADMIN_FALLBACK && window.location.pathname.includes('/admin')) || 
-          (!config.FORCE_REAL_API && connectionIssuesDetected)) {
-        if (!err.response) {
-          console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
-          return mockApi.delete(endpoint);
-        }
+      // Fall back to mock with appropriate permissions
+      if (shouldAllowMockFallback(endpoint) && !err.response && connectionIssuesDetected) {
+        console.warn(`Connection error, falling back to mock implementation for ${endpoint}`);
+        return mockApi.delete(endpoint);
       }
       throw err;
     }
@@ -237,6 +309,6 @@ const api = {
 };
 
 // Expose the interceptors for compatibility
-api.interceptors = realApi.interceptors;
+api.interceptors = primaryApi.interceptors;
 
 export default api; 

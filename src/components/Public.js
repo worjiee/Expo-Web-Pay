@@ -76,7 +76,7 @@ const Public = () => {
         </div>,
         { 
           position: 'top-center',
-          autoClose: 1000,
+          autoClose: 1500, // Increased duration for slower networks
           hideProgressBar: false,
           closeOnClick: false,
           pauseOnHover: false,
@@ -85,9 +85,31 @@ const Public = () => {
         }
       );
       
-      // Send code to server for verification - use the real API
-      const res = await api.post('/codes/verify', { code: code.trim() });
-      console.log('Verification response:', res.data);
+      const codeToVerify = code.trim().toUpperCase(); // Standardize code format
+      
+      // Function to handle verification with retries
+      const verifyCodeWithRetry = async (retriesLeft = 2) => {
+        try {
+          // Send code to server for verification
+          console.log(`Attempting code verification (retries left: ${retriesLeft})`);
+          const response = await api.post('/codes/verify', { code: codeToVerify });
+          console.log('Verification successful:', response.data);
+          return response;
+        } catch (err) {
+          // If we have retries left and this is a network error, try again
+          if (retriesLeft > 0 && !err.response) {
+            console.log(`Network error. Retrying verification in 1 second... (${retriesLeft} retries left)`);
+            // Wait a second before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return verifyCodeWithRetry(retriesLeft - 1);
+          }
+          // Otherwise, throw the error to be caught by the main try/catch
+          throw err;
+        }
+      };
+      
+      // Call verification with retry logic
+      const res = await verifyCodeWithRetry();
       
       setMessage(res.data.message);
       setError('');
@@ -131,6 +153,11 @@ const Public = () => {
         errorMsg = err.response.data.message;
       } else if (!err.response) {
         errorMsg = 'Network error. Please check your connection and try again.';
+        
+        // Add more helpful information for mobile users
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+          errorMsg += ' Make sure you have a stable internet connection and try again.';
+        }
       }
       
       setError(errorMsg);
@@ -144,10 +171,16 @@ const Public = () => {
             <strong>Error!</strong>
           </div>
           <div style={{ marginTop: '5px' }}>{errorMsg}</div>
+          {!err.response && (
+            <div style={{ marginTop: '8px', fontSize: '0.85rem' }}>
+              <i className="fas fa-wifi me-1"></i> 
+              Connection issue detected. Try again or check your internet connection.
+            </div>
+          )}
         </div>,
         {
           position: 'top-center',
-          autoClose: 4000,
+          autoClose: 5000, // Longer time for error messages
           hideProgressBar: false,
           closeOnClick: true,
           pauseOnHover: true,
