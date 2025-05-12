@@ -97,27 +97,51 @@ const MockAPI = {
   // Codes endpoints
   codes: {
     verify: async (codeData) => {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Simulate network delay - shorter for mobile
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       const { code } = codeData;
       console.log('Verifying code:', code);
       
-      // Standardize code format - convert to uppercase
-      const standardizedCode = code.trim().toUpperCase();
+      // ENHANCED: More robust standardization of code format
+      const standardizedCode = code.toString().trim().toUpperCase();
       console.log('Standardized code for verification:', standardizedCode);
       
       // Get the latest codes directly from localStorage
       const { codes } = getMockDb();
       console.log('Found codes for verification:', codes.length);
       
-      // Find exact match (case insensitive)
+      // ENHANCED: Log sample codes for debugging
+      if (codes.length > 0) {
+        console.log('Sample codes:');
+        codes.slice(0, Math.min(3, codes.length)).forEach((c, i) => {
+          console.log(`Code ${i}: ${c.code} (Used: ${c.used ? 'Yes' : 'No'})`);
+        });
+      }
+      
+      // ENHANCED: Find exact match with more robust case handling
       const matchingCode = codes.find(
-        c => c.code.toUpperCase() === standardizedCode
+        c => c.code.toString().trim().toUpperCase() === standardizedCode
       );
       
       if (!matchingCode) {
         console.log('No matching code found');
+        // Try to find similar codes to provide better error messages
+        const similarCodes = codes
+          .filter(c => 
+            c.code.toUpperCase().includes(standardizedCode) || 
+            standardizedCode.includes(c.code.toUpperCase())
+          )
+          .map(c => c.code);
+          
+        if (similarCodes.length > 0) {
+          console.log('Similar codes found:', similarCodes);
+          throw {
+            success: false,
+            message: `Invalid code. Did you mean ${similarCodes[0]}?`
+          };
+        }
+        
         throw {
           success: false,
           message: 'Invalid code'
@@ -132,8 +156,16 @@ const MockAPI = {
         };
       }
       
-      // Mark as used
+      // ENHANCED: More reliable status update
+      console.log('Valid code found, marking as used:', matchingCode.code);
+      
+      // Mark as used in local object first
+      matchingCode.used = true;
+      matchingCode.usedAt = new Date().toISOString();
+      
+      // Then update in localStorage via the proper function
       updateCodeStatus(matchingCode.code, true);
+      
       console.log('Code verified successfully:', matchingCode);
       
       return {

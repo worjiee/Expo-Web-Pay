@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import api from '../api/axios';
+import { getLocalCodes, saveLocalCodes } from '../proxyService';
 
 const Public = () => {
   const [code, setCode] = useState('');
@@ -116,125 +117,130 @@ const Public = () => {
     console.log('Verifying code (after uppercase):', codeToVerify);
     
     try {
-      // Get all codes from localStorage with enhanced debugging
-      console.log('DEBUG - Checking input code:', codeToVerify);
-      console.log('DEBUG - Code length:', codeToVerify.length);
-      console.log('DEBUG - Code characters:', [...codeToVerify].join(','));
+      // Direct localStorage verification - most reliable approach 
+      console.log('Starting direct localStorage verification');
+      console.log('Code to verify:', codeToVerify);
       
-      const storedCodesJson = localStorage.getItem('mockDb_codes');
-      console.log('DEBUG - Raw stored codes JSON:', storedCodesJson);
+      // Get all codes directly from localStorage
+      const allCodes = getLocalCodes();
+      console.log('Total codes found in localStorage:', allCodes.length);
       
-      if (storedCodesJson) {
-        try {
-          const allCodes = JSON.parse(storedCodesJson);
-          console.log('DEBUG - All stored codes:', allCodes);
+      if (Array.isArray(allCodes) && allCodes.length > 0) {
+        // Log a few sample codes for debugging
+        console.log('First few codes in storage:');
+        allCodes.slice(0, 3).forEach((c, i) => {
+          console.log(`Sample code ${i}:`, c.code, 'Used:', c.used || false);
+        });
+        
+        // CRITICAL FIX: Explicitly normalize both sides of the comparison
+        // This ensures consistent case handling across devices
+        const matchingCode = allCodes.find(c => 
+          c.code.toUpperCase().trim() === codeToVerify.toUpperCase().trim() && 
+          !c.used
+        );
+        
+        console.log('Found matching code?', !!matchingCode);
+        
+        if (matchingCode) {
+          console.log('MATCH FOUND!', matchingCode);
           
-          if (Array.isArray(allCodes) && allCodes.length > 0) {
-            // Log all codes and their values for debugging
-            allCodes.forEach((storedCode, index) => {
-              console.log(`DEBUG - Code ${index}:`, storedCode.code);
-              console.log(`DEBUG - Uppercase comparison:`, storedCode.code.toUpperCase() === codeToVerify);
-              console.log(`DEBUG - Lowercase comparison:`, storedCode.code.toLowerCase() === codeToVerify.toLowerCase());
-              console.log(`DEBUG - Is used:`, storedCode.used);
-            });
-            
-            // SUPER IMPORTANT FIX: Use loose comparison without caring about case
-            const matchingCode = allCodes.find(c => 
-              c.code.toUpperCase() === codeToVerify.toUpperCase() && !c.used
-            );
-            
-            console.log('DEBUG - Found matching code?', !!matchingCode);
-            
-            if (matchingCode) {
-              console.log('MATCH FOUND!', matchingCode);
-              
-              // Mark as used
-              matchingCode.used = true;
-              matchingCode.usedAt = new Date().toISOString();
-              
-              // Store back
-              localStorage.setItem('mockDb_codes', JSON.stringify(allCodes));
-              
-              // Success!
-              setMessage('Access code verified successfully! Redirecting to game...');
-              setVerified(true);
-              
-              toast.success(
-                <div>
-                  <i className="fas fa-check-circle me-2"></i> Code verified successfully!
-                </div>,
-                { 
-                  position: 'top-center',
-                  autoClose: 2000,
-                  hideProgressBar: false,
-                  closeOnClick: true,
-                  pauseOnHover: true,
-                  draggable: true,
-                  progress: undefined,
-                  style: successToastStyle
-                }
-              );
-              
-              // Redirect to game after delay
-              setTimeout(() => {
-                window.location.href = gameUrl;
-              }, 2000);
-              
-              setLoading(false);
-              return;
+          // Mark as used
+          matchingCode.used = true;
+          matchingCode.usedAt = new Date().toISOString();
+          
+          // Save back to localStorage
+          saveLocalCodes(allCodes);
+          
+          // Success!
+          setMessage('Access code verified successfully! Redirecting to game...');
+          setVerified(true);
+          
+          toast.success(
+            <div>
+              <i className="fas fa-check-circle me-2"></i> Code verified successfully!
+            </div>,
+            { 
+              position: 'top-center',
+              autoClose: 2000,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              style: successToastStyle
             }
-            
-            // Check for already used code
-            const usedMatchingCode = allCodes.find(c => 
-              c.code.toUpperCase() === codeToVerify.toUpperCase() && c.used
-            );
-            
-            if (usedMatchingCode) {
-              console.log('CODE FOUND BUT USED:', usedMatchingCode);
-              setError('This code has already been used.');
-              
-              toast.error(
-                <div>
-                  <i className="fas fa-exclamation-triangle me-2"></i> Code already used!
-                </div>,
-                { 
-                  position: 'top-center',
-                  autoClose: 3000,
-                  hideProgressBar: false,
-                  style: errorToastStyle
-                }
-              );
-              
-              setLoading(false);
-              return;
-            }
-            
-            // If not found at all, try looking for partial matches for better error messages
-            const allStoredCodeValues = allCodes.map(c => c.code.toUpperCase());
-            console.log('DEBUG - All code values:', allStoredCodeValues);
-            
-            // Try to look for similar codes for better error messages
-            const similarCodes = allStoredCodeValues.filter(c => 
-              c.includes(codeToVerify) || codeToVerify.includes(c)
-            );
-            
-            if (similarCodes.length > 0) {
-              console.log('Similar codes found:', similarCodes);
-              setError(`Invalid code. Did you mean ${similarCodes[0]}?`);
-            } else {
-              setError('Invalid code. Please check and try again.');
-            }
-          } else {
-            console.log('DEBUG - No codes found in storage or invalid format');
-            setError('No valid codes found in the system.');
-          }
-        } catch (parseError) {
-          console.error('Error parsing stored codes:', parseError);
-          setError('Error processing stored codes. Please try again.');
+          );
+          
+          // Redirect to game after delay
+          setTimeout(() => {
+            window.location.href = gameUrl;
+          }, 2000);
+          
+          setLoading(false);
+          return;
         }
+        
+        // Check for already used code
+        const usedMatchingCode = allCodes.find(c => 
+          c.code.toUpperCase().trim() === codeToVerify.toUpperCase().trim() && 
+          c.used
+        );
+        
+        if (usedMatchingCode) {
+          console.log('CODE FOUND BUT USED:', usedMatchingCode);
+          setError('This code has already been used.');
+          
+          toast.error(
+            <div>
+              <i className="fas fa-exclamation-triangle me-2"></i> Code already used!
+            </div>,
+            { 
+              position: 'top-center',
+              autoClose: 3000,
+              hideProgressBar: false,
+              style: errorToastStyle
+            }
+          );
+          
+          setLoading(false);
+          return;
+        }
+        
+        // If not found at all, try looking for partial matches for better error messages
+        const allStoredCodeValues = allCodes.map(c => c.code.toUpperCase().trim());
+        
+        // Try to look for similar codes for better error messages
+        // Only consider the code similar if it's at least 3 characters long
+        if (codeToVerify.length >= 3) {
+          const similarCodes = allStoredCodeValues.filter(c => 
+            c.includes(codeToVerify) || codeToVerify.includes(c)
+          );
+          
+          if (similarCodes.length > 0) {
+            console.log('Similar codes found:', similarCodes);
+            setError(`Invalid code. Did you mean ${similarCodes[0]}?`);
+            
+            setLoading(false);
+            toast.error(
+              <div>
+                <i className="fas fa-exclamation-triangle me-2"></i> Invalid code
+              </div>,
+              { 
+                position: 'top-center',
+                autoClose: 3000,
+                hideProgressBar: false,
+                style: errorToastStyle
+              }
+            );
+            return;
+          }
+        }
+        
+        // No matches found at all
+        setError('Invalid code. Please check and try again.');
       } else {
-        console.log('DEBUG - No codes found in localStorage');
-        setError('No codes found in the system. Please generate codes in admin panel first.');
+        console.log('No codes found in localStorage or invalid format');
+        setError('No valid codes found in the system. Please generate codes in admin panel first.');
       }
       
       // If we get here, the code verification failed

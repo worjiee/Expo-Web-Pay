@@ -1,8 +1,9 @@
 {
   "name": "client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "homepage": ".",
+  "description": "Code verification web app with enhanced cross-device compatibility",
   "dependencies": {
     "@testing-library/jest-dom": "^6.4.2",
     "@testing-library/react": "^14.2.1",
@@ -20,8 +21,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "vercel-build": "CI=false react-scripts build"
+    "eject": "react-scripts eject"
   },
   "eslintConfig": {
     "extends": [

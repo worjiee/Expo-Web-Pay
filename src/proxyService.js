@@ -15,7 +15,31 @@ export const generateRandomCode = () => {
 export const getLocalCodes = () => {
   try {
     const storedCodes = localStorage.getItem('mockDb_codes');
-    return storedCodes ? JSON.parse(storedCodes) : [];
+    
+    // Log storage info for debugging purposes
+    console.log(`localStorage read - Raw data length: ${storedCodes ? storedCodes.length : 0} bytes`);
+    
+    if (!storedCodes) {
+      console.log('No codes found in localStorage');
+      return [];
+    }
+    
+    // Parse the JSON data and standardize all codes (ensure uppercase)
+    const parsedCodes = JSON.parse(storedCodes);
+    
+    // Log the number of codes found
+    console.log(`Retrieved ${parsedCodes.length} codes from localStorage`);
+    
+    // Important: Standardize all codes to ensure consistency across devices
+    // This fixes issues with case sensitivity on different platforms
+    if (Array.isArray(parsedCodes)) {
+      return parsedCodes.map(code => ({
+        ...code,
+        code: code.code.toString().trim().toUpperCase()
+      }));
+    }
+    
+    return [];
   } catch (err) {
     console.error('Error getting codes from localStorage:', err);
     return [];
@@ -25,7 +49,18 @@ export const getLocalCodes = () => {
 // Function to save codes to localStorage
 export const saveLocalCodes = (codes) => {
   try {
-    localStorage.setItem('mockDb_codes', JSON.stringify(codes));
+    // Ensure all codes are standardized before saving
+    const standardizedCodes = Array.isArray(codes) ? codes.map(code => ({
+      ...code,
+      code: code.code.toString().trim().toUpperCase()
+    })) : [];
+    
+    // Save to localStorage
+    localStorage.setItem('mockDb_codes', JSON.stringify(standardizedCodes));
+    
+    // Log storage info for debugging purposes
+    console.log(`Saved ${standardizedCodes.length} codes to localStorage`);
+    
     return true;
   } catch (err) {
     console.error('Error saving codes to localStorage:', err);
@@ -38,9 +73,15 @@ export const addCodeToLocalStorage = (newCode) => {
   try {
     const codes = getLocalCodes();
     
+    // Ensure the new code is standardized
+    const standardizedCode = {
+      ...newCode,
+      code: newCode.code.toString().trim().toUpperCase()
+    };
+    
     // Check if code already exists (case insensitive)
-    if (!codes.some(c => c.code.toUpperCase() === newCode.code.toUpperCase())) {
-      codes.push(newCode);
+    if (!codes.some(c => c.code === standardizedCode.code)) {
+      codes.push(standardizedCode);
       saveLocalCodes(codes);
       return true;
     }
@@ -55,7 +96,12 @@ export const addCodeToLocalStorage = (newCode) => {
 export const updateCodeStatus = (code, used) => {
   try {
     const codes = getLocalCodes();
-    const codeObj = codes.find(c => c.code.toUpperCase() === code.toUpperCase());
+    
+    // Standardize the input code
+    const standardizedCode = code.toString().trim().toUpperCase();
+    
+    // Find the code object using strict case-insensitive comparison
+    const codeObj = codes.find(c => c.code === standardizedCode);
     
     if (codeObj) {
       codeObj.used = used;
@@ -63,6 +109,8 @@ export const updateCodeStatus = (code, used) => {
       saveLocalCodes(codes);
       return true;
     }
+    
+    console.log(`Code not found for status update: ${standardizedCode}`);
     return false;
   } catch (err) {
     console.error('Error updating code status in localStorage:', err);
