@@ -1,7 +1,7 @@
 // Configuration file for API URLs
 
 // Use the latest backend API URL directly
-const API_URL = 'https://q-o6boqvomj-karls-projects-fccc69ea.vercel.app/api';
+const API_URL = 'https://q-cg4xks0mg-karls-projects-fccc69ea.vercel.app/api';
 
 // Log the API URL
 console.log('Using API URL:', API_URL);
