@@ -15,11 +15,7 @@ const mockDb = {
       role: 'admin'
     }
   ],
-  codes: [
-    { id: 1, code: 'FREE2023', used: false },
-    { id: 2, code: 'GAMEPASS', used: false },
-    { id: 3, code: 'WELCOME', used: true }
-  ]
+  codes: [] // Start with an empty array of codes
 };
 
 // Helper to generate JWT-like tokens (simplified)
