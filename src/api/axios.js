@@ -2,7 +2,7 @@ import axios from 'axios';
 import config from '../config';
 
 // Import the mock API as a fallback
-import MockAPI from './MockAPI';
+import MockAPI from '../MockAPI';
 
 console.log('Creating axios instance with baseURL:', config.API_URL);
 
