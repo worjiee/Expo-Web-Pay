@@ -116,10 +116,6 @@
           localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
           logEl.innerHTML += '<div>Cleared global code usage data</div>';
           
-          // Reset the app_initialized flag to prevent re-adding codes
-          localStorage.removeItem('app_initialized');
-          logEl.innerHTML += '<div>Reset application initialization state</div>';
-          
           // Try to broadcast the update
           try {
             const broadcastChannel = new BroadcastChannel('codes_sync_channel');

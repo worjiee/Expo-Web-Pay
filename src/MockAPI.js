@@ -178,17 +178,11 @@ const MockAPI = {
         usedAt: null
       };
       
-      // Mark this as a user-initiated save
-      localStorage.setItem('user_initiated_save', 'true');
-      
       // Add to codes list
       codes.push(newCode);
       
       // Save to localStorage
       saveLocalCodes(codes);
-      
-      // Clear the flag after saving
-      setTimeout(() => localStorage.removeItem('user_initiated_save'), 100);
       
       return {
         success: true,
@@ -241,17 +235,11 @@ const MockAPI = {
         };
       }
       
-      // Mark this as a user-initiated save
-      localStorage.setItem('user_initiated_save', 'true');
-      
       // Add to codes list
       codes.push(newCode);
       
       // Save to localStorage
       saveLocalCodes(codes);
-      
-      // Clear the flag after saving
-      setTimeout(() => localStorage.removeItem('user_initiated_save'), 100);
       
       // Return the new code
       return {
@@ -322,17 +310,11 @@ const MockAPI = {
         };
       }
       
-      // Mark this as a user-initiated save
-      localStorage.setItem('user_initiated_save', 'true');
-      
       // Add all new codes to database
       codes.push(...newCodes);
       
       // Save to localStorage
       saveLocalCodes(codes);
-      
-      // Clear the flag after saving
-      setTimeout(() => localStorage.removeItem('user_initiated_save'), 100);
       
       // Return the new codes
       return {

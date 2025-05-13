@@ -11,10 +11,6 @@ console.log('Updated sync timestamp:', syncTimestamp);
 localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
 console.log('Cleared global code usage data');
 
-// Reset the app_initialized flag to prevent re-adding codes
-localStorage.removeItem('app_initialized');
-console.log('Reset application initialization state');
-
 // Try to broadcast the update if possible
 try {
   const broadcastChannel = new BroadcastChannel('codes_sync_channel');

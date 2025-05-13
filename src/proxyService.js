@@ -56,14 +56,9 @@ export const isSyncNeeded = (lastCheckedTimestamp) => {
 // Function to get current codes from localStorage
 export const getLocalCodes = () => {
   try {
-    // Check if we should bypass the force_empty flag
-    const bypassForceClear = localStorage.getItem('user_initiated_save') === 'true';
-    
-    // Only return empty if force_empty is set AND we're not bypassing it
-    if (localStorage.getItem('codes_force_empty') === 'true' && !bypassForceClear) {
-      console.log('Codes are forcefully kept empty due to user preference (system initialization)');
-      return [];
-    }
+    // We're completely disabling the force_empty restriction
+    // to ensure codes are always properly retrieved
+    localStorage.removeItem('codes_force_empty');
     
     const storedCodes = localStorage.getItem('mockDb_codes');
     
@@ -93,18 +88,10 @@ export const getLocalCodes = () => {
 // Function to save codes to localStorage
 export const saveLocalCodes = (codes) => {
   try {
-    // If codes have been forcefully cleared, only prevent automatic code initialization
-    // but allow manually adding codes by the user
-    const isSystemInitialization = 
-      !localStorage.getItem('user_initiated_save') && 
-      localStorage.getItem('codes_force_empty') === 'true';
+    // We're completely disabling the force_empty restriction
+    // to ensure codes are always properly saved
+    localStorage.removeItem('codes_force_empty');
     
-    if (isSystemInitialization && codes.length > 0) {
-      console.log('Skipping automatic code initialization due to force_empty flag');
-      return false;
-    }
-    
-    // For all other cases, proceed with saving codes
     // Ensure all codes are standardized before saving
     const standardizedCodes = Array.isArray(codes) ? codes.map(code => ({
       id: code.id || Math.floor(Math.random() * 100000),
