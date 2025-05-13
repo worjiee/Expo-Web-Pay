@@ -335,8 +335,8 @@ const Admin = () => {
     <>
       {/* Navigation Bar with animation */}
       <nav className="navbar navbar-expand-lg navbar-dark" style={{
-        background: 'linear-gradient(135deg, #000428 0%, #004e92 100%)',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
         animation: 'fadeIn 0.5s ease-in-out',
         padding: '15px 0'
       }}>
@@ -348,8 +348,8 @@ const Admin = () => {
               marginRight: '10px',
               borderRadius: '50%',
               overflow: 'hidden',
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
-              border: '2px solid rgba(255, 255, 255, 0.3)'
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)',
+              border: '2px solid rgba(255, 255, 255, 0.2)'
             }}>
               <img 
                 src="/company_logo.jpg" 
@@ -432,11 +432,21 @@ const Admin = () => {
         </div>
       </nav>
     
-      <div className={`container mt-5 ${fadeIn ? 'fadeIn' : ''}`} style={{ animation: 'fadeIn 1s ease-in-out' }}>
+      <div 
+        className={`container mt-5 ${fadeIn ? 'fadeIn' : ''}`} 
+        style={{ 
+          animation: 'fadeIn 1s ease-in-out',
+          background: '#0d1117',
+          color: '#c9d1d9',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)'
+        }}
+      >
         <ToastContainer />
         
-        <div className="card mb-4">
-          <div className="card-header bg-primary text-white">
+        <div className="card mb-4" style={{ background: '#161b22', border: 'none', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}>
+          <div className="card-header" style={{ background: '#21262d', borderBottom: '1px solid #30363d', color: 'white' }}>
             <h2 className="mb-0">Admin Dashboard</h2>
           </div>
           <div className="card-body">
@@ -445,7 +455,7 @@ const Admin = () => {
               <div className="me-3" style={{
                 width: '50px',
                 height: '50px',
-                background: 'linear-gradient(135deg, #000428 0%, #004e92 100%)',
+                background: 'linear-gradient(135deg, #4a148c 0%, #7b1fa2 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -454,16 +464,22 @@ const Admin = () => {
                 <i className="fas fa-user-shield" style={{ fontSize: '1.5rem', color: 'white' }}></i>
               </div>
               <div>
-                <h5 className="mb-0">Welcome, Admin</h5>
+                <h5 className="mb-0" style={{ color: 'white' }}>Welcome, Admin</h5>
                 <p className="text-muted mb-0">Manage your game access codes</p>
                 </div>
               </div>
               <div>
                 <div>
                   <button 
-                    className="btn btn-info"
+                    className="btn"
                     onClick={forceSync}
                     disabled={syncStatus === 'Syncing...'}
+                    style={{
+                      background: '#238636',
+                      color: 'white',
+                      border: 'none',
+                      boxShadow: '0 2px 5px rgba(0, 0, 0, 0.3)'
+                    }}
                   >
                     <i className="fas fa-sync-alt me-2"></i>
                     {syncStatus || 'Force Sync'}
@@ -472,17 +488,17 @@ const Admin = () => {
               </div>
             </div>
             <div className="mt-3">
-              <div className="alert alert-info">
+              <div className="alert" style={{ background: '#0d1b2a', color: '#93c5fd', border: '1px solid #1e40af' }}>
                 <i className="fas fa-info-circle me-2"></i>
                 <strong>Info:</strong> Codes are automatically synchronized across all your devices.
                 {realtimeStatus === 'connected' && (
-                  <span className="ms-2 badge bg-success">
+                  <span className="ms-2 badge" style={{ background: '#065f46', color: 'white' }}>
                     <i className="fas fa-cloud-upload-alt me-1"></i>
                     Firebase Sync Active
                   </span>
                 )}
                 {realtimeStatus === 'offline' && (
-                  <span className="ms-2 badge bg-warning text-dark">
+                  <span className="ms-2 badge" style={{ background: '#92400e', color: 'white' }}>
                     <i className="fas fa-exclamation-triangle me-1"></i>
                     Firebase Offline
                   </span>
@@ -490,25 +506,25 @@ const Admin = () => {
               </div>
               <div className="row mt-3">
                 <div className="col">
-                  <div className="card bg-light">
+                  <div className="card" style={{ background: '#21262d', border: 'none', boxShadow: '0 2px 5px rgba(0, 0, 0, 0.3)' }}>
                     <div className="card-body text-center">
-                      <h3 className="display-4">{codes.length}</h3>
+                      <h3 className="display-4" style={{ color: 'white' }}>{codes.length}</h3>
                       <p className="text-muted">Total Codes</p>
                     </div>
                   </div>
                 </div>
                 <div className="col">
-                  <div className="card bg-light">
+                  <div className="card" style={{ background: '#21262d', border: 'none', boxShadow: '0 2px 5px rgba(0, 0, 0, 0.3)' }}>
                     <div className="card-body text-center">
-                      <h3 className="display-4">{codes.filter(c => !c.used && !c.isUsed).length}</h3>
+                      <h3 className="display-4" style={{ color: '#4ade80' }}>{codes.filter(c => !c.used && !c.isUsed).length}</h3>
                       <p className="text-muted">Available Codes</p>
                     </div>
                   </div>
                 </div>
                 <div className="col">
-                  <div className="card bg-light">
+                  <div className="card" style={{ background: '#21262d', border: 'none', boxShadow: '0 2px 5px rgba(0, 0, 0, 0.3)' }}>
                     <div className="card-body text-center">
-                      <h3 className="display-4">{codes.filter(c => c.used || c.isUsed).length}</h3>
+                      <h3 className="display-4" style={{ color: '#f87171' }}>{codes.filter(c => c.used || c.isUsed).length}</h3>
                       <p className="text-muted">Used Codes</p>
                     </div>
                   </div>
@@ -522,12 +538,12 @@ const Admin = () => {
         
         <div className="row mb-4">
           <div className="col-md-6">
-            <div className="card">
-              <div className="card-header">
+            <div className="card" style={{ background: '#161b22', border: 'none', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}>
+              <div className="card-header" style={{ background: '#21262d', borderBottom: '1px solid #30363d', color: 'white' }}>
                 <h5>Generate Random Codes</h5>
               </div>
               <div className="card-body">
-                <button className="btn btn-primary me-2 mb-2" onClick={generateCode}>
+                <button className="btn me-2 mb-2" style={{ background: '#1f6feb', color: 'white', border: 'none' }} onClick={generateCode}>
                   Generate Single Code
                 </button>
                 <div className="input-group mb-3">
@@ -538,8 +554,9 @@ const Admin = () => {
                     onChange={(e) => setCount(parseInt(e.target.value) || 1)}
                     min="1"
                     max="100"
+                    style={{ background: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d' }}
                   />
-                  <button className="btn btn-success" onClick={generateMultipleCodes}>
+                  <button className="btn" style={{ background: '#238636', color: 'white', border: 'none' }} onClick={generateMultipleCodes}>
                     Generate Multiple Codes
                   </button>
                 </div>
@@ -548,8 +565,8 @@ const Admin = () => {
           </div>
           
           <div className="col-md-6">
-            <div className="card">
-              <div className="card-header">
+            <div className="card" style={{ background: '#161b22', border: 'none', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}>
+              <div className="card-header" style={{ background: '#21262d', borderBottom: '1px solid #30363d', color: 'white' }}>
                 <h5>Add New Code</h5>
               </div>
               <div className="card-body">
@@ -561,8 +578,9 @@ const Admin = () => {
                     value={customCode}
                     onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
                     maxLength={5}
+                    style={{ background: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d' }}
                   />
-                  <button className="btn btn-primary" onClick={createCustomCode}>
+                  <button className="btn" style={{ background: '#1f6feb', color: 'white', border: 'none' }} onClick={createCustomCode}>
                     Add Code
                   </button>
                 </div>
@@ -572,8 +590,8 @@ const Admin = () => {
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-header d-flex justify-content-between align-items-center">
+        <div className="card" style={{ background: '#161b22', border: 'none', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}>
+          <div className="card-header d-flex justify-content-between align-items-center" style={{ background: '#21262d', borderBottom: '1px solid #30363d', color: 'white' }}>
             <div>
             <h5>Code Database</h5>
               {lastUpdated && (
@@ -585,7 +603,7 @@ const Admin = () => {
             <div>
               <div className="btn-group">
                 <button
-                  className="btn btn-outline-secondary"
+                  className="btn"
                   onClick={() => {
                     // Export codes as CSV
                     const csvContent = "data:text/csv;charset=utf-8," 
@@ -605,14 +623,16 @@ const Admin = () => {
                     toast.success('Codes exported successfully');
                   }}
                   disabled={codes.length === 0}
+                  style={{ background: '#1f6feb', color: 'white', border: 'none', marginRight: '5px' }}
                 >
                   <i className="fas fa-download me-2"></i>
                   Export Codes
                 </button>
                 <button 
-                  className="btn btn-danger" 
+                  className="btn" 
                   onClick={clearAllCodes}
                   disabled={loading || codes.length === 0}
+                  style={{ background: '#da3633', color: 'white', border: 'none' }}
                 >
                   <i className="fas fa-trash-alt me-2"></i>
                   Delete All Codes
@@ -643,12 +663,13 @@ const Admin = () => {
                     fetchCodes();
                   }
                 }}
+                style={{ background: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d' }}
               />
             </div>
             <div className="table-responsive">
-              <table className="table table-striped">
+              <table className="table" style={{ color: '#c9d1d9' }}>
                 <thead>
-                  <tr>
+                  <tr style={{ borderBottom: '1px solid #30363d' }}>
                     <th>Code</th>
                     <th>Status</th>
                     <th>Generated At</th>
@@ -666,12 +687,15 @@ const Admin = () => {
                     </tr>
                   ) : (
                     codes.map((code) => (
-                      <tr key={code.id || code._id}>
+                      <tr key={code.id || code._id} style={{ borderBottom: '1px solid #30363d' }}>
                         <td>
-                          <strong>{code.code}</strong>
+                          <strong style={{ color: 'white' }}>{code.code}</strong>
                         </td>
                         <td>
-                          <span className={`badge ${code.used || code.isUsed ? 'bg-danger' : 'bg-success'}`}>
+                          <span className={`badge ${code.used || code.isUsed ? 'bg-danger' : ''}`} style={{ 
+                            background: code.used || code.isUsed ? '#da3633' : '#238636',
+                            color: 'white'
+                          }}>
                             {code.used || code.isUsed ? 'Used' : 'Available'}
                           </span>
                         </td>
@@ -681,8 +705,9 @@ const Admin = () => {
                         </td>
                         <td>
                           <button 
-                            className="btn btn-sm btn-danger" 
+                            className="btn btn-sm" 
                             onClick={() => deleteCode(code.id || code._id)}
+                            style={{ background: '#da3633', color: 'white', border: 'none' }}
                           >
                             <i className="fas fa-trash-alt"></i>
                           </button>
