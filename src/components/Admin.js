@@ -16,6 +16,7 @@ import {
   setupFirebaseSync
 } from '../proxyService';
 import FirebaseSync from '../firebaseConfig';
+import config from '../config';
 
 const Admin = () => {
   const [codes, setCodes] = useState([]);
@@ -131,42 +132,54 @@ const Admin = () => {
       }
     });
     
-    // Setup Firebase for cross-device sync
+    // Setup Firebase for cross-device sync - AUTO ENABLE per config
     const initFirebase = async () => {
-      const firebaseInitialized = await setupFirebaseSync((message) => {
-        console.log('Firebase sync message in Admin component:', message);
+      // Always initialize Firebase if auto-enable is set
+      if (config.AUTO_ENABLE_FIREBASE_SYNC) {
+        console.log('Auto-enabling Firebase sync...');
         
-        // Set firebase connection status
-        setFirebaseConnected(true);
-        
-        // Handle Firebase sync events
-        if (message.action === 'FIREBASE_SYNC') {
-          // Update UI
-          setSyncStatus('Firebase sync active');
-          // Refresh codes list
-          fetchCodes(false);
-          // Update last sync check
-          setLastSyncCheck(getSyncTimestamp());
+        const firebaseInitialized = await setupFirebaseSync((message) => {
+          console.log('Firebase sync message in Admin component:', message);
           
-          // Show toast notification
-          toast.info(`Cross-device sync: ${message.data.type}`, {
-            position: 'top-right',
-            autoClose: 2000
-          });
+          // Set firebase connection status
+          setFirebaseConnected(true);
+          
+          // Handle Firebase sync events
+          if (message.action === 'FIREBASE_SYNC') {
+            // Update UI
+            setSyncStatus('Firebase sync active');
+            // Refresh codes list
+            fetchCodes(false);
+            // Update last sync check
+            setLastSyncCheck(getSyncTimestamp());
+            
+            // Show toast notification
+            toast.info(`Cross-device sync: ${message.data.type}`, {
+              position: 'top-right',
+              autoClose: 2000
+            });
+          }
+        });
+        
+        if (firebaseInitialized) {
+          setFirebaseConnected(true);
+          setSyncStatus('Firebase sync active');
         }
-      });
-      
-      setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
+        
+        setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
+      } else {
+        setRealtimeStatus(broadcastListenerSet ? 'limited' : 'offline');
+      }
     };
     
     // Initialize Firebase sync
     initFirebase();
     
-    // Start polling for sync across devices (every 2 seconds)
+    // Start polling for sync across devices (every 1 second for more real-time updates)
     startPollingSync(() => {
       console.log('Admin component - polling refresh triggered');
       fetchCodes(false);
-    }, 2000);
+    }, 1000); // Poll every second instead of 2 seconds
     
     // Clean up interval when component unmounts
     return () => {
@@ -404,61 +417,22 @@ const Admin = () => {
     // Update sync status
     setSyncStatus('Syncing...');
     
+    // Sync to Firebase if connected
+    if (firebaseConnected) {
+      import('../firebaseConfig').then(module => {
+        if (module && module.syncCodesNow) {
+          console.log('Triggering immediate Firebase sync');
+          module.syncCodesNow();
+        }
+      }).catch(err => {
+        console.error('Error during Firebase sync:', err);
+      });
+    }
+    
     // Clear sync status after 2 seconds
     setTimeout(() => {
       setSyncStatus(firebaseConnected ? 'Firebase sync active' : '');
     }, 2000);
-  };
-
-  // Function to explicitly enable Firebase sync across devices
-  const enableFirebaseSync = async () => {
-    try {
-      setSyncStatus('Enabling Firebase Sync...');
-      const firebaseInitialized = await setupFirebaseSync((message) => {
-        console.log('Firebase sync message in Admin component:', message);
-        
-        // Set firebase connection status
-        setFirebaseConnected(true);
-        
-        // Handle Firebase sync events
-        if (message.action === 'FIREBASE_SYNC') {
-          // Update UI
-          setSyncStatus('Firebase sync active');
-          // Refresh codes list
-          fetchCodes(false);
-          // Update last sync check
-          setLastSyncCheck(getSyncTimestamp());
-          
-          // Show toast notification
-          toast.info(`Cross-device sync: ${message.data.type}`, {
-            position: 'top-right',
-            autoClose: 2000
-          });
-        }
-      });
-      
-      if (firebaseInitialized) {
-        setFirebaseConnected(true);
-        setSyncStatus('Firebase sync active');
-        toast.success('Firebase sync enabled. Codes will sync across all devices.', {
-          position: 'top-right',
-          autoClose: 3000
-        });
-      } else {
-        setSyncStatus('');
-        toast.error('Failed to enable Firebase sync.', {
-          position: 'top-right',
-          autoClose: 3000
-        });
-      }
-    } catch (err) {
-      console.error('Error enabling Firebase sync:', err);
-      setSyncStatus('');
-      toast.error(`Error enabling Firebase sync: ${err.message || 'Unknown error'}`, {
-        position: 'top-right',
-        autoClose: 3000
-      });
-    }
   };
 
   return (
@@ -591,24 +565,13 @@ const Admin = () => {
               <div>
                 <div>
                   <button 
-                    className="btn btn-info me-2"
+                    className="btn btn-info"
                     onClick={forceSync}
                     disabled={syncStatus === 'Syncing...'}
                   >
                     <i className="fas fa-sync-alt me-2"></i>
                     {syncStatus || 'Force Sync'}
                   </button>
-                  
-                  {!firebaseConnected && (
-                    <button 
-                      className="btn btn-success"
-                      onClick={enableFirebaseSync}
-                      disabled={syncStatus === 'Enabling Firebase Sync...'}
-                    >
-                      <i className="fas fa-cloud-upload-alt me-2"></i>
-                      Enable Cross-Device Sync
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
