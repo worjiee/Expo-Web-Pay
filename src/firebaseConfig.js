@@ -7,7 +7,7 @@ import { getAuth, signInWithEmailAndPassword, signInAnonymously } from "firebase
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   // Note: When you create a new API key in Google Cloud Console, replace this value with your new key
-  apiKey: "AIzaSyBVOAQZlG5djqUQVP1AdgERD1WZZB2fvY0", // Replace this with your new API key
+  apiKey: "AIzaSyBPaWpxyh5VGkHBORw0GmLr4vJEpn2X78k", // Replace this with your new API key
   authDomain: "websitepay-2681c.firebaseapp.com",
   databaseURL: "https://websitepay-2681c-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "websitepay-2681c",
@@ -81,7 +81,7 @@ export const getAllCodes = async () => {
     console.error("Firebase not initialized");
     return [];
   }
-
+  
   try {
     // Ensure we're signed in
     if (!auth.currentUser) {
@@ -197,7 +197,7 @@ export const deleteCode = async (codeId) => {
     console.error("Firebase not initialized");
     return { success: false, error: "Firebase not initialized" };
   }
-
+  
   try {
     // Ensure we're signed in
     if (!auth.currentUser) {

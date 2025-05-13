@@ -6,7 +6,7 @@ const { getAuth, signInAnonymously } = require('firebase/auth');
 // Your web app's Firebase configuration
 const firebaseConfig = {
   // Note: When you create a new API key in Google Cloud Console, replace this value with your new key
-  apiKey: "AIzaSyBVOAQZlG5djqUQVP1AdgERD1WZZB2fvY0", // Replace this with your new API key
+  apiKey: "AIzaSyBPaWpxyh5VGkHBORw0GmLr4vJEpn2X78k", // Updated API key
   authDomain: "websitepay-2681c.firebaseapp.com",
   databaseURL: "https://websitepay-2681c-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "websitepay-2681c",
