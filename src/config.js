@@ -15,7 +15,10 @@ const ALLOW_PUBLIC_FALLBACK = true; // Allow mock API for public code verificati
 const AUTO_ENABLE_FIREBASE_SYNC = true;
 
 // For code verification, set a longer timeout to handle slower connections on mobile devices
-const CODE_VERIFICATION_TIMEOUT = 30000; // 30 seconds for mobile connections
+const CODE_VERIFICATION_TIMEOUT = 10000; // 10 seconds for mobile connections
+
+// Firebase settings
+const FIREBASE_TIMEOUT = 15000; // 15 seconds for Firebase operations
 
 // Log configuration
 console.log('Primary API URL:', PRIMARY_API_URL);
@@ -25,6 +28,7 @@ console.log('Allow admin fallback:', ALLOW_ADMIN_FALLBACK ? 'Yes' : 'No');
 console.log('Allow public fallback:', ALLOW_PUBLIC_FALLBACK ? 'Yes' : 'No');
 console.log('Auto-enable Firebase sync:', AUTO_ENABLE_FIREBASE_SYNC ? 'Yes' : 'No');
 console.log('Code verification timeout:', CODE_VERIFICATION_TIMEOUT + 'ms');
+console.log('Firebase timeout:', FIREBASE_TIMEOUT + 'ms');
 
 // Export as a named constant to avoid ESLint warnings
 const config = {
@@ -34,7 +38,8 @@ const config = {
   ALLOW_ADMIN_FALLBACK,
   ALLOW_PUBLIC_FALLBACK,
   AUTO_ENABLE_FIREBASE_SYNC,
-  CODE_VERIFICATION_TIMEOUT
+  CODE_VERIFICATION_TIMEOUT,
+  FIREBASE_TIMEOUT
 };
 
 export default config; 
