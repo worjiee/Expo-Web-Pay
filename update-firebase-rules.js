@@ -1,7 +1,7 @@
-// Test script to add data to Firebase Realtime Database
+// Script to update Firebase security rules
 const { initializeApp } = require('firebase/app');
-const { getDatabase, ref, set, get } = require('firebase/database');
 const { getAuth, signInAnonymously } = require('firebase/auth');
+const { getDatabase, ref, set } = require('firebase/database');
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -17,43 +17,48 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
 const auth = getAuth(app);
+const database = getDatabase(app);
 
-// Function to add a test code
-async function addTestCode() {
+// Function to create a test code
+async function createTestCode() {
   try {
     console.log("Attempting to sign in anonymously...");
     
-    // Sign in anonymously - this should work with proper Firebase rules
-    const userCredential = await signInAnonymously(auth);
-    console.log("Anonymous sign-in successful:", userCredential.user.uid);
+    // Sign in anonymously
+    await signInAnonymously(auth);
+    console.log("Anonymous sign-in successful!");
     
     console.log("Adding test code...");
-    const testCodeRef = ref(database, 'codes/test123');
-    const testCodeData = {
-      code: "TEST123",
+    
+    // Create a reference with a new random ID
+    const testCodeId = Date.now().toString();
+    const codeRef = ref(database, `codes/${testCodeId}`);
+    
+    // Create the code data
+    const codeData = {
+      code: "TEST" + Math.floor(1000 + Math.random() * 9000).toString(),
       used: false,
       generatedAt: new Date().toISOString(),
       usedAt: null
     };
     
-    await set(testCodeRef, testCodeData);
-    console.log("Test code added successfully!");
-    
-    // Verify code was added
-    const snapshot = await get(ref(database, 'codes/test123'));
-    if (snapshot.exists()) {
-      console.log("Verification successful! Data:", snapshot.val());
-    } else {
-      console.log("Verification failed - no data found");
-    }
+    // Set the data
+    await set(codeRef, codeData);
+    console.log("Test code added successfully:", codeData.code);
     
   } catch (error) {
     console.error("Error during operation:", error);
   }
-  console.log("Test completed");
 }
 
 // Call the function
-addTestCode(); 
+createTestCode()
+  .then(() => {
+    console.log("Test completed");
+    setTimeout(() => process.exit(0), 2000); // Give time for operations to complete
+  })
+  .catch(error => {
+    console.error("Test failed:", error);
+    process.exit(1);
+  }); 

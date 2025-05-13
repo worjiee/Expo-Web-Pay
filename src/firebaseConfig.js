@@ -1,12 +1,13 @@
 // Firebase configuration
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get, update, remove, onValue } from "firebase/database";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, signInAnonymously } from "firebase/auth";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyBVOAQZlG5djqUQVP1AdgERD1WZZB2fvY0",
+  // Note: When you create a new API key in Google Cloud Console, replace this value with your new key
+  apiKey: "AIzaSyBVOAQZlG5djqUQVP1AdgERD1WZZB2fvY0", // Replace this with your new API key
   authDomain: "websitepay-2681c.firebaseapp.com",
   databaseURL: "https://websitepay-2681c-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "websitepay-2681c",
@@ -15,13 +16,50 @@ const firebaseConfig = {
   appId: "1:728732104278:web:5b2bfcb7bc8a50f7baf5d9"
 };
 
+// Log the config to verify it's correct
+console.log("Firebase Config:", firebaseConfig);
+
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
-const auth = getAuth(app);
+let app, database, auth;
+let firebaseService = null;
+
+try {
+  app = initializeApp(firebaseConfig);
+  database = getDatabase(app);
+  auth = getAuth(app);
+
+  // Sign in anonymously by default to ensure database access
+  signInAnonymously(auth)
+    .then(() => {
+      console.log("Firebase: Anonymous authentication successful");
+    })
+    .catch((error) => {
+      console.error("Firebase: Anonymous authentication error:", error.code, error.message);
+      // Try a second time with additional error handling
+      setTimeout(() => {
+        signInAnonymously(auth)
+          .then(() => {
+            console.log("Firebase: Second attempt anonymous authentication successful");
+          })
+          .catch((error) => {
+            console.error("Firebase: Second attempt authentication failed:", error.code, error.message);
+          });
+      }, 2000);
+    });
+} catch (error) {
+  console.error("Error initializing Firebase:", error);
+  app = null;
+  database = null;
+  auth = null;
+}
 
 // Function to authenticate with Firebase
 export const authenticateWithFirebase = async (email, password) => {
+  if (!auth) {
+    console.error("Firebase not initialized");
+    return { success: false, error: "Firebase not initialized" };
+  }
+
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return {
@@ -39,7 +77,22 @@ export const authenticateWithFirebase = async (email, password) => {
 
 // Function to get all codes from Firebase
 export const getAllCodes = async () => {
+  if (!database || !auth) {
+    console.error("Firebase not initialized");
+    return [];
+  }
+
   try {
+    // Ensure we're signed in
+    if (!auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        console.log("Signed in anonymously before getAllCodes");
+      } catch (authError) {
+        console.error("Error signing in anonymously:", authError);
+      }
+    }
+    
     const codesRef = ref(database, 'codes');
     const snapshot = await get(codesRef);
     
@@ -63,7 +116,22 @@ export const getAllCodes = async () => {
 
 // Function to save a code to Firebase
 export const saveCode = async (code) => {
+  if (!database || !auth) {
+    console.error("Firebase not initialized");
+    return { success: false, error: "Firebase not initialized" };
+  }
+
   try {
+    // Ensure we're signed in
+    if (!auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        console.log("Signed in anonymously before saveCode");
+      } catch (authError) {
+        console.error("Error signing in anonymously:", authError);
+      }
+    }
+    
     // Create a reference with an auto-generated ID
     const codeId = code.id || Date.now().toString();
     const codeRef = ref(database, `codes/${codeId}`);
@@ -93,7 +161,22 @@ export const saveCode = async (code) => {
 
 // Function to update a code in Firebase
 export const updateCode = async (codeId, updates) => {
+  if (!database || !auth) {
+    console.error("Firebase not initialized");
+    return { success: false, error: "Firebase not initialized" };
+  }
+
   try {
+    // Ensure we're signed in
+    if (!auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        console.log("Signed in anonymously before updateCode");
+      } catch (authError) {
+        console.error("Error signing in anonymously:", authError);
+      }
+    }
+    
     const codeRef = ref(database, `codes/${codeId}`);
     await update(codeRef, updates);
     return {
@@ -110,7 +193,22 @@ export const updateCode = async (codeId, updates) => {
 
 // Function to delete a code from Firebase
 export const deleteCode = async (codeId) => {
+  if (!database || !auth) {
+    console.error("Firebase not initialized");
+    return { success: false, error: "Firebase not initialized" };
+  }
+
   try {
+    // Ensure we're signed in
+    if (!auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        console.log("Signed in anonymously before deleteCode");
+      } catch (authError) {
+        console.error("Error signing in anonymously:", authError);
+      }
+    }
+    
     const codeRef = ref(database, `codes/${codeId}`);
     await remove(codeRef);
     return {
@@ -127,7 +225,22 @@ export const deleteCode = async (codeId) => {
 
 // Function to delete all codes from Firebase
 export const deleteAllCodes = async () => {
+  if (!database || !auth) {
+    console.error("Firebase not initialized");
+    return { success: false, error: "Firebase not initialized" };
+  }
+
   try {
+    // Ensure we're signed in
+    if (!auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        console.log("Signed in anonymously before deleteAllCodes");
+      } catch (authError) {
+        console.error("Error signing in anonymously:", authError);
+      }
+    }
+    
     const codesRef = ref(database, 'codes');
     await remove(codesRef);
     return {
@@ -144,7 +257,22 @@ export const deleteAllCodes = async () => {
 
 // Function to verify a code in Firebase
 export const verifyCode = async (codeValue) => {
+  if (!database || !auth) {
+    console.error("Firebase not initialized");
+    return { success: false, error: "Firebase not initialized" };
+  }
+
   try {
+    // Ensure we're signed in
+    if (!auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        console.log("Signed in anonymously before verifyCode");
+      } catch (authError) {
+        console.error("Error signing in anonymously:", authError);
+      }
+    }
+    
     // Standardize the code
     const standardizedCode = codeValue.toString().trim().toUpperCase();
     
@@ -189,6 +317,22 @@ export const verifyCode = async (codeValue) => {
 
 // Function to listen for code changes in real-time
 export const listenForCodeChanges = (callback) => {
+  if (!database || !auth) {
+    console.error("Firebase not initialized");
+    return () => {}; // Return empty function
+  }
+
+  // Ensure we're signed in
+  if (!auth.currentUser) {
+    signInAnonymously(auth)
+      .then(() => {
+        console.log("Signed in anonymously before listenForCodeChanges");
+      })
+      .catch(error => {
+        console.error("Firebase anonymous auth error:", error);
+      });
+  }
+  
   const codesRef = ref(database, 'codes');
   
   const unsubscribe = onValue(codesRef, (snapshot) => {
@@ -203,13 +347,16 @@ export const listenForCodeChanges = (callback) => {
     } else {
       callback([]);
     }
+  }, (error) => {
+    console.error("Error in listenForCodeChanges:", error);
   });
   
   // Return the unsubscribe function to stop listening later
   return unsubscribe;
 };
 
-export default {
+// Create Firebase service object
+firebaseService = {
   app,
   database,
   auth,
@@ -221,4 +368,6 @@ export default {
   verifyCode,
   listenForCodeChanges,
   authenticateWithFirebase
-}; 
+};
+
+export default firebaseService; 

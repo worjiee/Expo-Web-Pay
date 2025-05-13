@@ -18,6 +18,30 @@ import { generateRandomCode } from './proxyService';
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'admin123';
 
+// Helper function for error handling
+const handleFirebaseError = (error, operation) => {
+  console.error(`Firebase error during ${operation}:`, error);
+  
+  // Check for common Firebase errors
+  if (error && error.code) {
+    if (error.code.includes('permission-denied')) {
+      console.error('Firebase permission denied. Please check Firebase security rules.');
+      return 'Permission denied. Please make sure Firebase security rules allow this operation.';
+    }
+    
+    if (error.code.includes('api-key')) {
+      console.error('Firebase API key issue. Check API key configuration.');
+      return 'Authentication error. Please check your Firebase API key configuration.';
+    }
+    
+    if (error.code.includes('network')) {
+      return 'Network error. Please check your internet connection.';
+    }
+  }
+  
+  return error.message || 'Unknown error occurred';
+};
+
 // Mock API functions
 const MockAPI = {
   // Authentication endpoints
@@ -97,10 +121,10 @@ const MockAPI = {
         
         return result;
       } catch (error) {
-        console.error('Error verifying code:', error);
+        const errorMessage = handleFirebaseError(error, 'code verification');
         return {
           success: false,
-          message: 'Error verifying code: ' + error.message
+          message: 'Error verifying code: ' + errorMessage
         };
       }
     },
@@ -118,10 +142,10 @@ const MockAPI = {
           data: codes
         };
       } catch (error) {
-        console.error('Error getting codes:', error);
+        const errorMessage = handleFirebaseError(error, 'getting codes');
         return {
           success: false,
-          message: 'Error getting codes: ' + error.message
+          message: 'Error getting codes: ' + errorMessage
         };
       }
     },
@@ -136,7 +160,7 @@ const MockAPI = {
         
         // Check if code already exists
         const standardizedCode = codeData.code.toString().trim().toUpperCase();
-        if (codes.some(c => c.code === standardizedCode)) {
+        if (codes && codes.length > 0 && codes.some(c => c.code === standardizedCode)) {
           return {
             success: false,
             message: 'Code already exists'
@@ -169,10 +193,10 @@ const MockAPI = {
           };
         }
       } catch (error) {
-        console.error('Error creating code:', error);
+        const errorMessage = handleFirebaseError(error, 'creating code');
         return {
           success: false,
-          message: 'Error creating code: ' + error.message
+          message: 'Error creating code: ' + errorMessage
         };
       }
     },
@@ -195,7 +219,7 @@ const MockAPI = {
           randomCode = generateRandomCode();
           
           // Check if code already exists
-          const exists = codes.some(c => c.code === randomCode);
+          const exists = codes && codes.length > 0 && codes.some(c => c.code === randomCode);
           
           if (!exists) {
             break;
@@ -211,8 +235,8 @@ const MockAPI = {
           };
         }
         
-        // Create new code object
-        const newCode = { 
+        // Create the new code object
+        const newCode = {
           code: randomCode,
           used: false,
           generatedAt: new Date().toISOString(),
@@ -233,151 +257,177 @@ const MockAPI = {
         } else {
           return {
             success: false,
-            message: 'Error saving code: ' + (result.error || 'Unknown error')
+            message: 'Error saving generated code: ' + (result.error || 'Unknown error')
           };
         }
       } catch (error) {
-        console.error('Error generating code:', error);
+        const errorMessage = handleFirebaseError(error, 'generating code');
         return {
           success: false,
-          message: 'Error generating code: ' + error.message
+          message: 'Error generating code: ' + errorMessage
         };
       }
     },
     
-    generateMultiple: async ({ count }) => {
-      // Validate input
-      if (isNaN(count) || count < 1 || count > 100) {
-        return {
-          success: false,
-          message: 'Invalid count. Please provide a number between 1 and 100.'
-        };
-      }
-      
+    generateMultiple: async (options) => {
       // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const { count = 1 } = options;
+      const generatedCodes = [];
+      const errors = [];
       
       try {
-        // Get current codes to check for duplicates
-        const { data: codes } = await MockAPI.codes.getAll();
+        // Get all existing codes first to check for duplicates
+        const { data: existingCodes } = await MockAPI.codes.getAll();
+        const existingCodeValues = existingCodes ? existingCodes.map(c => c.code) : [];
         
-        // Generate multiple codes
-        const newCodes = [];
-        
+        // Generate and save codes one by one
         for (let i = 0; i < count; i++) {
-          let uniqueCode;
-          let attempts = 0;
-          const maxAttempts = 10;
-          
-          // Try to generate a unique code
-          do {
-            const randomCode = generateRandomCode();
+          try {
+            // Generate a unique code
+            let randomCode;
+            let attempts = 0;
+            const maxAttempts = 10;
             
-            // Check if code already exists in DB or in newly generated codes
-            const existsInDB = codes.some(c => c.code === randomCode);
-            const existsInNew = newCodes.some(c => c.code === randomCode);
+            do {
+              randomCode = generateRandomCode();
+              
+              // Check if code already exists
+              const exists = existingCodeValues.includes(randomCode) || 
+                             generatedCodes.some(c => c.code === randomCode);
+              
+              if (!exists) {
+                break;
+              }
+              
+              attempts++;
+            } while (attempts < maxAttempts);
             
-            if (!existsInDB && !existsInNew) {
-              uniqueCode = randomCode;
-              break;
+            if (attempts >= maxAttempts) {
+              errors.push('Failed to generate a unique code after multiple attempts');
+              continue;
             }
             
-            attempts++;
-          } while (attempts < maxAttempts);
-          
-          if (!uniqueCode) {
-            continue; // Skip if we couldn't generate a unique code after max attempts
-          }
-          
-          // Create the new code object
-          const newCode = {
-            code: uniqueCode,
-            used: false,
-            generatedAt: new Date().toISOString(),
-            usedAt: null
-          };
-          
-          // Save to Firebase
-          const result = await saveCode(newCode);
-          
-          if (result.success) {
-            // Add the ID to the new code
-            newCode.id = result.id;
-            newCodes.push(newCode);
+            // Create the new code object
+            const newCode = {
+              code: randomCode,
+              used: false,
+              generatedAt: new Date().toISOString(),
+              usedAt: null
+            };
+            
+            // Save to Firebase
+            const result = await saveCode(newCode);
+            
+            if (result.success) {
+              // Add the ID to the new code
+              newCode.id = result.id;
+              
+              // Add to existing codes list to prevent duplicates in subsequent iterations
+              existingCodeValues.push(newCode.code);
+              
+              // Add to result
+              generatedCodes.push(newCode);
+            } else {
+              errors.push(`Failed to save code ${randomCode}: ${result.error || 'Unknown error'}`);
+            }
+          } catch (error) {
+            const errorMessage = handleFirebaseError(error, `generating code ${i+1}/${count}`);
+            errors.push(errorMessage);
           }
         }
         
-        if (newCodes.length === 0) {
+        // Return result
+        if (generatedCodes.length > 0) {
+          return {
+            success: true,
+            data: generatedCodes,
+            errors: errors.length > 0 ? errors : undefined
+          };
+        } else {
           return {
             success: false,
-            message: 'Failed to generate any unique codes'
+            message: 'Failed to generate any codes',
+            errors
           };
         }
-        
-        return {
-          success: true,
-          data: newCodes
-        };
       } catch (error) {
-        console.error('Error generating multiple codes:', error);
+        const errorMessage = handleFirebaseError(error, 'generating multiple codes');
         return {
           success: false,
-          message: 'Error generating codes: ' + error.message
+          message: 'Error generating multiple codes: ' + errorMessage
         };
       }
     },
     
-    delete: async ({ code }) => {
+    delete: async (codeId) => {
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 300));
       
       try {
-        // Get all codes to find the ID
-        const { data: codes } = await MockAPI.codes.getAll();
-        
-        // Find the code by its value
-        const codeObj = codes.find(c => c.code === code);
-        
-        if (!codeObj) {
-          return {
-            success: false,
-            message: 'Code not found'
-          };
-        }
-        
-        // Delete from Firebase using the ID
-        const result = await deleteCode(codeObj.id);
+        // Use Firebase to delete the code
+        const result = await deleteCode(codeId);
         
         return {
           success: result.success,
-          message: result.success ? 'Code deleted successfully' : 'Error deleting code'
+          message: result.success ? 'Code deleted successfully' : (result.error || 'Failed to delete code')
         };
       } catch (error) {
-        console.error('Error deleting code:', error);
+        const errorMessage = handleFirebaseError(error, 'deleting code');
         return {
           success: false,
-          message: 'Error deleting code: ' + error.message
+          message: 'Error deleting code: ' + errorMessage
         };
       }
     },
     
     deleteAll: async () => {
       // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       try {
-        // Delete all codes from Firebase
+        // Use Firebase to delete all codes
         const result = await deleteAllCodes();
         
         return {
           success: result.success,
-          message: result.success ? 'All codes deleted successfully' : 'Error deleting all codes'
+          message: result.success ? 'All codes deleted successfully' : (result.error || 'Failed to delete all codes')
         };
       } catch (error) {
-        console.error('Error deleting all codes:', error);
+        const errorMessage = handleFirebaseError(error, 'deleting all codes');
         return {
           success: false,
-          message: 'Error deleting all codes: ' + error.message
+          message: 'Error deleting all codes: ' + errorMessage
+        };
+      }
+    },
+    
+    update: async (codeId, updates) => {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      try {
+        // Make sure we have valid updates
+        if (!updates || typeof updates !== 'object') {
+          return {
+            success: false,
+            message: 'Invalid updates provided'
+          };
+        }
+        
+        // Use Firebase to update the code
+        const result = await updateCode(codeId, updates);
+        
+        return {
+          success: result.success,
+          message: result.success ? 'Code updated successfully' : (result.error || 'Failed to update code')
+        };
+      } catch (error) {
+        const errorMessage = handleFirebaseError(error, 'updating code');
+        return {
+          success: false,
+          message: 'Error updating code: ' + errorMessage
         };
       }
     }

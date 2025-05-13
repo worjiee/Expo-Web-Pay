@@ -1,0 +1,79 @@
+========================================================
+FIREBASE DATABASE RULES GUIDE
+========================================================
+
+To fix the Firebase permission denied errors, please follow these steps to update your Firebase Realtime Database rules in the Firebase console:
+
+1. Go to https://console.firebase.google.com/
+2. Select your project: "websitepay-2681c"
+3. From the left navigation menu, select "Realtime Database"
+4. Click on the "Rules" tab
+5. Replace the existing rules with one of the following options:
+
+OPTION 1 (FOR TESTING ONLY): Fully open access (use only temporarily)
+```json
+{
+  "rules": {
+    ".read": true,
+    ".write": true
+  }
+}
+```
+
+OPTION 2 (RECOMMENDED FOR PRODUCTION): Authentication required
+```json
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+    "codes": {
+      ".indexOn": "code"
+    }
+  }
+}
+```
+
+6. Click "Publish" to save the rules
+
+These rules:
+- OPTION 1: Allows anyone to read and write to the database (USE ONLY FOR TESTING)
+- OPTION 2: Allows only authenticated users to read and write to the database
+  - Also adds an index on the "code" field to make code lookups faster
+
+RECOMMENDATION:
+1. First use OPTION 1 to test if your application can connect to Firebase
+2. Once confirmed working, switch to OPTION 2 for proper security
+
+========================================================
+
+TROUBLESHOOTING AUTHENTICATION ISSUES
+========================================================
+
+If you're still having issues after updating the rules, try these additional steps:
+
+1. Make sure Firebase Authentication has "Anonymous authentication" enabled:
+   - Go to Authentication > Sign-in method
+   - Enable "Anonymous" provider
+
+2. Check that your API key restrictions in Google Cloud Console are set correctly:
+   - Go to https://console.cloud.google.com/apis/credentials
+   - Find the API key being used by your app
+   - Make sure it has access to:
+     * Firebase Realtime Database API
+     * Identity Toolkit API
+     * Token Service API
+
+3. Consider creating a new API key with no restrictions for testing:
+   - Go to Google Cloud Console > API & Services > Credentials
+   - Click "Create credentials" > "API key"
+   - Use the new key without restrictions for testing
+   - Once working, you can add appropriate restrictions to the new key
+
+4. Update all Firebase config files with the new API key:
+   - client/src/firebaseConfig.js
+   - client/test-firebase-db.js
+   - client/update-firebase-rules.js
+
+5. If all else fails, try temporarily using the REST API directly:
+   - Update database rules to OPTION 1 (open access)
+   - Run the test-direct-api.js script to verify database access 
