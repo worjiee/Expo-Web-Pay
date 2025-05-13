@@ -16,7 +16,6 @@ import {
   setupFirebaseSync
 } from '../proxyService';
 import FirebaseSync from '../firebaseConfig';
-import config from '../config';
 
 const Public = () => {
   const [codeInput, setCodeInput] = useState('');
@@ -102,35 +101,31 @@ const Public = () => {
     
     // Setup Firebase for cross-device sync - always enable automatically
     const initFirebase = async () => {
-      // Always initialize Firebase if auto-enable is set in config
-      if (config.AUTO_ENABLE_FIREBASE_SYNC) {
-        console.log('Auto-enabling Firebase sync...');
+      // Always initialize Firebase automatically
+      console.log('Auto-enabling Firebase sync...');
+      
+      const firebaseInitialized = await setupFirebaseSync((message) => {
+        console.log('Firebase sync message in Public component:', message);
         
-        const firebaseInitialized = await setupFirebaseSync((message) => {
-          console.log('Firebase sync message in Public component:', message);
+        // Set status to connected
+        setRealtimeStatus('connected');
+        
+        // Handle Firebase sync events
+        if (message.action === 'FIREBASE_SYNC') {
+          // Update local timestamp
+          setLastRefresh(new Date());
           
-          // Set status to connected
-          setRealtimeStatus('connected');
-          
-          // Handle Firebase sync events
-          if (message.action === 'FIREBASE_SYNC') {
-            // Update local timestamp
-            setLastRefresh(new Date());
-            
-            // If current input matches a used code, update error state
-            if (codeInput) {
-              const isUsed = isCodeUsedGlobally(codeInput);
-              if (isUsed) {
-                setError(`This code has been used on another device`);
-              }
+          // If current input matches a used code, update error state
+          if (codeInput) {
+            const isUsed = isCodeUsedGlobally(codeInput);
+            if (isUsed) {
+              setError(`This code has been used on another device`);
             }
           }
-        });
-        
-        setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
-      } else {
-        setRealtimeStatus(broadcastListenerSet ? 'limited' : 'offline');
-      }
+        }
+      });
+      
+      setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
     };
     
     // Initialize Firebase sync
@@ -323,7 +318,7 @@ const Public = () => {
       
       // Add a timeout to prevent hanging indefinitely if Firebase is slow to respond
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Firebase check timed out')), 5000) // Increase timeout for better reliability
+        setTimeout(() => reject(new Error('Firebase check timed out')), 8000) // Increase timeout to reduce timeouts
       );
       
       const fetchPromise = get(child(dbRef, `master_usage/${normalizedCode}`));
@@ -559,25 +554,11 @@ const Public = () => {
               
               <Link 
                 to="/login" 
-                className="text-white text-decoration-none d-flex align-items-center me-3"
+                className="text-white text-decoration-none d-flex align-items-center"
                 style={{ fontSize: '1rem' }}
               >
                 <i className="fas fa-lock me-2"></i>
                 <span className="d-none d-sm-inline">Admin Portal</span>
-              </Link>
-              
-              <Link 
-                to="/debug" 
-                className="text-white text-decoration-none d-flex align-items-center"
-                style={{
-                  fontSize: '1rem',
-                  backgroundColor: 'rgba(255, 69, 69, 0.2)',
-                  padding: '5px 10px',
-                  borderRadius: '4px'
-                }}
-              >
-                <i className="fas fa-bug me-2"></i>
-                <span className="d-none d-sm-inline">Debug</span>
               </Link>
             </div>
           </div>

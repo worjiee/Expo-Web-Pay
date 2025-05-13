@@ -16,7 +16,6 @@ import {
   setupFirebaseSync
 } from '../proxyService';
 import FirebaseSync from '../firebaseConfig';
-import config from '../config';
 
 const Admin = () => {
   const [codes, setCodes] = useState([]);
@@ -134,42 +133,38 @@ const Admin = () => {
     
     // Setup Firebase for cross-device sync - AUTO ENABLE per config
     const initFirebase = async () => {
-      // Always initialize Firebase if auto-enable is set
-      if (config.AUTO_ENABLE_FIREBASE_SYNC) {
-        console.log('Auto-enabling Firebase sync...');
+      // Always initialize Firebase automatically
+      console.log('Auto-enabling Firebase sync...');
+      
+      const firebaseInitialized = await setupFirebaseSync((message) => {
+        console.log('Firebase sync message in Admin component:', message);
         
-        const firebaseInitialized = await setupFirebaseSync((message) => {
-          console.log('Firebase sync message in Admin component:', message);
-          
-          // Set firebase connection status
-          setFirebaseConnected(true);
-          
-          // Handle Firebase sync events
-          if (message.action === 'FIREBASE_SYNC') {
-            // Update UI
-            setSyncStatus('Firebase sync active');
-            // Refresh codes list
-            fetchCodes(false);
-            // Update last sync check
-            setLastSyncCheck(getSyncTimestamp());
-            
-            // Show toast notification
-            toast.info(`Cross-device sync: ${message.data.type}`, {
-              position: 'top-right',
-              autoClose: 2000
-            });
-          }
-        });
+        // Set firebase connection status
+        setFirebaseConnected(true);
         
-        if (firebaseInitialized) {
-          setFirebaseConnected(true);
+        // Handle Firebase sync events
+        if (message.action === 'FIREBASE_SYNC') {
+          // Update UI
           setSyncStatus('Firebase sync active');
+          // Refresh codes list
+          fetchCodes(false);
+          // Update last sync check
+          setLastSyncCheck(getSyncTimestamp());
+          
+          // Show toast notification
+          toast.info(`Cross-device sync: ${message.data.type}`, {
+            position: 'top-right',
+            autoClose: 2000
+          });
         }
-        
-        setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
-      } else {
-        setRealtimeStatus(broadcastListenerSet ? 'limited' : 'offline');
+      });
+      
+      if (firebaseInitialized) {
+        setFirebaseConnected(true);
+        setSyncStatus('Firebase sync active');
       }
+      
+      setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
     };
     
     // Initialize Firebase sync
