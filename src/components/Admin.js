@@ -337,17 +337,34 @@ const Admin = () => {
   const clearAllCodes = () => {
     if (window.confirm('Are you sure you want to delete ALL codes from the database? This cannot be undone!')) {
       try {
-        // Clear codes directly from localStorage
+        // Clear codes from all possible localStorage keys
         localStorage.setItem('mockDb_codes', JSON.stringify([]));
         
         // Clear any globally used codes
         localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
         
+        // Clear any sync-related data
+        localStorage.setItem('code_sync_timestamp', new Date().toISOString());
+        
+        // Set a deletion timestamp to prevent automatic reloading of codes
+        localStorage.setItem('codes_last_deleted', new Date().getTime().toString());
+        
+        // Remove any additional keys that might be storing codes
+        localStorage.removeItem('predefined_codes');
+        localStorage.removeItem('cached_codes');
+        localStorage.removeItem('app_codes');
+        localStorage.removeItem('backup_codes');
+        
+        // Clear any remaining initialization flags
+        localStorage.removeItem('app_initialized');
+        localStorage.removeItem('codes_force_empty');
+        localStorage.removeItem('user_initiated_save');
+        
         // Refresh codes list
         fetchCodes();
         
         // Show success message
-        toast.success('All codes have been deleted. You can add new codes now.', {
+        toast.success('All codes have been completely erased from storage', {
           position: 'top-right',
           autoClose: 3000
         });
@@ -420,6 +437,21 @@ const Admin = () => {
     
     // Update sync status
     setSyncStatus('Syncing...');
+  };
+  
+  // Function to re-enable code generation
+  const enableCodeGeneration = () => {
+    // Remove the deletion timestamp
+    localStorage.removeItem('codes_last_deleted');
+    
+    // Show success message
+    toast.success('Code generation has been re-enabled', {
+      position: 'top-right',
+      autoClose: 3000
+    });
+    
+    // Refresh codes list
+    fetchCodes();
   };
 
   return (
@@ -767,6 +799,15 @@ const Admin = () => {
                   <i className="fas fa-trash-alt me-2"></i>
                   Delete All Codes
                 </button>
+                {localStorage.getItem('codes_last_deleted') && (
+                  <button 
+                    className="btn btn-outline-success ms-2" 
+                    onClick={enableCodeGeneration}
+                  >
+                    <i className="fas fa-unlock me-2"></i>
+                    Enable Code Generation
+                  </button>
+                )}
               </div>
             </div>
           </div>

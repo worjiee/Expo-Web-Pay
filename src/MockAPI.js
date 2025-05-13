@@ -20,6 +20,18 @@ const getMockDb = () => {
   };
 };
 
+// Helper function to check if codes were recently deleted
+const wereCodesRecentlyDeleted = () => {
+  const lastDeleteTime = localStorage.getItem('codes_last_deleted');
+  if (!lastDeleteTime) return false;
+  
+  const deleteTimestamp = parseInt(lastDeleteTime, 10);
+  const currentTime = new Date().getTime();
+  const oneHourMs = 60 * 60 * 1000; // 1 hour in milliseconds
+  
+  return (currentTime - deleteTimestamp < oneHourMs);
+};
+
 // Mock API functions
 const MockAPI = {
   // Authentication endpoints
@@ -153,6 +165,14 @@ const MockAPI = {
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 300));
       
+      // Check if codes were recently deleted
+      if (wereCodesRecentlyDeleted()) {
+        throw {
+          success: false,
+          message: 'Code creation is temporarily disabled after clearing all codes'
+        };
+      }
+      
       // Get current codes
       const { codes } = getMockDb();
       
@@ -192,6 +212,14 @@ const MockAPI = {
     generate: async () => {
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Check if codes were recently deleted
+      if (wereCodesRecentlyDeleted()) {
+        throw {
+          success: false,
+          message: 'Code generation is temporarily disabled after clearing all codes'
+        };
+      }
       
       // Get current codes
       const { codes } = getMockDb();
@@ -258,6 +286,14 @@ const MockAPI = {
       
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Check if codes were recently deleted
+      if (wereCodesRecentlyDeleted()) {
+        throw {
+          success: false,
+          message: 'Code generation is temporarily disabled after clearing all codes'
+        };
+      }
       
       // Get current codes
       const { codes } = getMockDb();

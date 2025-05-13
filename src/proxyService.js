@@ -56,9 +56,20 @@ export const isSyncNeeded = (lastCheckedTimestamp) => {
 // Function to get current codes from localStorage
 export const getLocalCodes = () => {
   try {
-    // We're completely disabling the force_empty restriction
-    // to ensure codes are always properly retrieved
-    localStorage.removeItem('codes_force_empty');
+    // First, check if codes have been recently deleted within the last hour
+    const lastDeleteTime = localStorage.getItem('codes_last_deleted');
+    const currentTime = new Date().getTime();
+    
+    if (lastDeleteTime) {
+      const deleteTimestamp = parseInt(lastDeleteTime, 10);
+      const oneHourMs = 60 * 60 * 1000; // 1 hour in milliseconds
+      
+      // If codes were deleted less than an hour ago, always return empty array
+      if (currentTime - deleteTimestamp < oneHourMs) {
+        console.log('Codes were recently deleted, returning empty array');
+        return [];
+      }
+    }
     
     const storedCodes = localStorage.getItem('mockDb_codes');
     
@@ -88,9 +99,21 @@ export const getLocalCodes = () => {
 // Function to save codes to localStorage
 export const saveLocalCodes = (codes) => {
   try {
-    // We're completely disabling the force_empty restriction
-    // to ensure codes are always properly saved
-    localStorage.removeItem('codes_force_empty');
+    // Check if codes have been recently deleted
+    const lastDeleteTime = localStorage.getItem('codes_last_deleted');
+    
+    if (lastDeleteTime) {
+      const deleteTimestamp = parseInt(lastDeleteTime, 10);
+      const currentTime = new Date().getTime();
+      const oneHourMs = 60 * 60 * 1000; // 1 hour in milliseconds
+      
+      // If codes were deleted less than an hour ago, and we're trying to save new codes
+      // that aren't explicitly empty, prevent the save
+      if (currentTime - deleteTimestamp < oneHourMs && codes.length > 0) {
+        console.log('Codes were recently deleted, preventing automatic save');
+        return false;
+      }
+    }
     
     // Ensure all codes are standardized before saving
     const standardizedCodes = Array.isArray(codes) ? codes.map(code => ({
