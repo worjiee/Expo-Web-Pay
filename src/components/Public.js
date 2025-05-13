@@ -12,10 +12,8 @@ import {
   setupBroadcastListener,
   startPollingSync,
   stopPollingSync,
-  getAllGloballyUsedCodes,
-  setupFirebaseSync
+  getAllGloballyUsedCodes
 } from '../proxyService';
-import FirebaseSync from '../firebaseConfig';
 import config from '../config';
 
 const Public = () => {
@@ -83,54 +81,14 @@ const Public = () => {
           });
           setLastRefresh(new Date());
           break;
-        case 'FIREBASE_SYNC':
-          // Firebase sync updates
-          if (message.data.type === 'usage_update') {
-            toast.info('Received code usage update from another device', {
-              position: 'top-right',
-              autoClose: 3000
-            });
-          }
-          setLastRefresh(new Date());
-          setRealtimeStatus('connected');
-          break;
         default:
           // For any other updates, just refresh the timestamp
           setLastRefresh(new Date());
       }
     });
     
-    // Setup Firebase for cross-device sync - always enable automatically
-    const initFirebase = async () => {
-      // Always initialize Firebase automatically
-      console.log('Auto-enabling Firebase sync...');
-      
-      const firebaseInitialized = await setupFirebaseSync((message) => {
-        console.log('Firebase sync message in Public component:', message);
-        
-        // Set status to connected
-        setRealtimeStatus('connected');
-        
-        // Handle Firebase sync events
-        if (message.action === 'FIREBASE_SYNC') {
-          // Update local timestamp
-          setLastRefresh(new Date());
-          
-          // If current input matches a used code, update error state
-          if (codeInput) {
-            const isUsed = isCodeUsedGlobally(codeInput);
-            if (isUsed) {
-              setError(`This code has been used on another device`);
-            }
-          }
-        }
-      });
-      
-      setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
-    };
-    
-    // Initialize Firebase sync
-    initFirebase();
+    // Set realtime status based on broadcast channel availability
+    setRealtimeStatus(broadcastListenerSet ? 'limited' : 'offline');
     
     // Start polling for sync across devices (every 1 second for more real-time updates)
     startPollingSync(() => {
@@ -144,7 +102,7 @@ const Public = () => {
           setError(`This code has been used on another device`);
         }
       }
-    }, 1000); // Poll every second instead of 2 seconds
+    }, 1000); // Poll every second
 
     // Cleanup function to remove listeners when component unmounts
     return () => {
@@ -153,153 +111,13 @@ const Public = () => {
     };
   }, [codeInput]);
 
-  // Function to check Firebase directly for the most up-to-date status
-  const checkCodeInFirebase = async (code) => {
-    try {
-      // Normalize code to ensure consistency
-      const normalizedCode = code.toString().trim().toUpperCase();
-      
-      // Import Firebase functions
-      const { initializeApp } = await import('firebase/app');
-      const { getDatabase, ref, get, child } = await import('firebase/database');
-      
-      // Firebase configuration (same as in other files)
-      const firebaseConfig = {
-        apiKey: "AIzaSyDltP_6QMX-9h5X7Z8Q7xSW1X5M4iV8sHo",
-        authDomain: "codesync-demo.firebaseapp.com",
-        projectId: "codesync-demo",
-        storageBucket: "codesync-demo.appspot.com",
-        messagingSenderId: "432019689101",
-        appId: "1:432019689101:web:7d8cfe0c1a77d15b4c6f83",
-        databaseURL: "https://codesync-demo-default-rtdb.firebaseio.com"
-      };
-      
-      console.log('Checking code using Firebase URL:', firebaseConfig.databaseURL);
-      
-      // Initialize Firebase if needed
-      let app;
-      try {
-        app = initializeApp(firebaseConfig);
-      } catch (err) {
-        // Already initialized, ignore
-        console.log('Firebase already initialized in checkCodeInFirebase');
-      }
-      
-      // Get database reference
-      const database = getDatabase();
-      const dbRef = ref(database);
-      
-      // First check Firebase for the code in master_usage
-      console.log(`Checking code ${normalizedCode} directly in Firebase master_usage`);
-      
-      try {
-        // Use a timeout promise with a longer timeout
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Firebase check timed out')), config.FIREBASE_TIMEOUT || 15000) // Use config value
-        );
-        
-        const fetchPromise = get(child(dbRef, `master_usage/${normalizedCode}`));
-        
-        // Race between the fetch and the timeout
-        const snapshot = await Promise.race([fetchPromise, timeoutPromise])
-          .catch(err => {
-            console.error('Firebase master_usage check failed or timed out:', err);
-            throw err;
-          });
-          
-        if (snapshot && snapshot.exists()) {
-          const data = snapshot.val();
-          console.log(`Firebase check result for ${normalizedCode}:`, data);
-          
-          // If used, return the usage data
-          if (data && data.used === true) {
-            return data;
-          }
-        } else if (snapshot) { // snapshot exists but data doesn't
-          console.log(`Code ${normalizedCode} not found in Firebase master_usage`);
-        }
-      } catch (masterUsageError) {
-        console.warn('Error checking master_usage, falling back to codes collection:', masterUsageError);
-      }
-      
-      // Also check in the codes collection as fallback
-      try {
-        console.log('Falling back to codes collection check');
-        const codesSnapshot = await get(child(dbRef, 'codes/codes'))
-          .catch(err => {
-            console.warn('Fallback Firebase codes check failed:', err);
-            return null;
-          });
-          
-        if (codesSnapshot && codesSnapshot.exists()) {
-          const codesData = codesSnapshot.val();
-          
-          if (Array.isArray(codesData)) {
-            const matchingCode = codesData.find(c => 
-              c && c.code && c.code.toString().trim().toUpperCase() === normalizedCode && c.used
-            );
-            
-            if (matchingCode) {
-              console.log(`Code ${normalizedCode} found as used in Firebase codes collection`);
-              return { used: true, usedAt: matchingCode.usedAt || new Date().toISOString() };
-            }
-          }
-        }
-      } catch (fallbackErr) {
-        console.warn('Error in fallback Firebase check:', fallbackErr);
-      }
-      
-      // Not used or not found
-      return null;
-    } catch (err) {
-      console.error('Error checking Firebase for code:', err);
-      // Return null instead of throwing to allow fallback to local storage
-      return null;
-    }
-  };
-
-  // Simple verification function focused on localStorage but also checking Firebase
+  // Simple verification function focused on localStorage
   const verifyCodeInLocalStorage = async (codeToVerify) => {
     // First, normalize the code
     const normalizedCode = codeToVerify.toString().trim().toUpperCase();
     console.log(`Checking code "${normalizedCode}"`);
     
     try {
-      // Add this code to skip Firebase checks during development to prevent timeouts
-      let isUsedInFirebase = null;
-      
-      try {
-        // Try to check Firebase directly first for the most reliable status
-        console.log('Checking Firebase for the most up-to-date status...');
-        isUsedInFirebase = await checkCodeInFirebase(normalizedCode);
-      } catch (firebaseError) {
-        console.warn('Firebase check failed, continuing with local check:', firebaseError);
-      }
-      
-      if (isUsedInFirebase) {
-        console.log(`Code ${normalizedCode} is marked as used in Firebase`);
-        // Update local storage to match Firebase status for future reference
-        try {
-          const allCodes = getLocalCodes();
-          const codeToUpdate = allCodes.find(c => c.code.toUpperCase().trim() === normalizedCode);
-          if (codeToUpdate && !codeToUpdate.used) {
-            codeToUpdate.used = true;
-            codeToUpdate.usedAt = isUsedInFirebase.usedAt || new Date().toISOString();
-            saveLocalCodes(allCodes);
-            console.log('Updated local code to match Firebase status');
-          }
-        } catch (localUpdateErr) {
-          console.error('Error updating local code status:', localUpdateErr);
-        }
-        
-        return { 
-          success: false, 
-          reason: 'already-used-globally',
-          usedAt: isUsedInFirebase.usedAt || new Date().toISOString()
-        };
-      }
-      
-      // Continue with local checks if not used in Firebase
       // Get all codes from localStorage
       const allCodes = getLocalCodes();
       console.log(`Checking code "${normalizedCode}" against ${allCodes.length} codes in localStorage`);
@@ -364,18 +182,6 @@ const Public = () => {
           
           // Update status display
           setRealtimeStatus('connected');
-          
-          // Force immediate Firebase sync
-          try {
-            await import('../firebaseConfig').then(module => {
-              if (module && module.syncCodesNow) {
-                console.log('Triggering immediate Firebase sync');
-                module.syncCodesNow();
-              }
-            });
-          } catch (syncErr) {
-            console.error('Error during immediate Firebase sync:', syncErr);
-          }
         } catch (err) {
           console.error('Error saving code status to localStorage:', err);
         }
@@ -434,7 +240,7 @@ const Public = () => {
       
       console.log('Verifying code:', codeToVerify);
       
-      // Use our enhanced verification function that checks Firebase
+      // Use our localStorage verification function
       const result = await verifyCodeInLocalStorage(codeToVerify);
       
       if (result.success) {

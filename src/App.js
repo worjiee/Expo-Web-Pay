@@ -4,14 +4,22 @@ import Admin from './components/Admin';
 import Public from './components/Public';
 import Login from './components/Login';
 import GamePage from './components/GamePage';
+import Debug from './components/Debug';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import './App.css';
+import { setupTestCodes } from './setupTestCodes';
 
 function App() {
   useEffect(() => {
+    // Initialize test codes for easier testing
+    const codesAdded = setupTestCodes();
+    if (codesAdded) {
+      console.log('Test codes have been added for verification testing');
+    }
+    
     // Check if there is an import parameter in the URL
     const urlParams = new URLSearchParams(window.location.search);
     const importParam = urlParams.get('import');
@@ -42,7 +50,8 @@ function App() {
                 id: newCode.id || Math.floor(Math.random() * 100000),
                 code: newCode.code,
                 used: false,
-                createdAt: newCode.createdAt || new Date().toISOString()
+                generatedAt: newCode.generatedAt || newCode.createdAt || new Date().toISOString(),
+                usedAt: null
               };
               existingCodes.push(codeToAdd);
               added++;
@@ -89,6 +98,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/game" element={<GamePage />} />
+        <Route path="/debug" element={<Debug />} />
       </Routes>
     </Router>
   );
