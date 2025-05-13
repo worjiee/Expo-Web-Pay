@@ -11,6 +11,10 @@ console.log('Updated sync timestamp:', syncTimestamp);
 localStorage.setItem('codes_last_deleted', new Date().getTime().toString());
 console.log('Set deletion timestamp to prevent code reappearance');
 
+// Set permanent deletion flag
+localStorage.setItem('permanent_code_deletion', 'true');
+console.log('Set permanent deletion flag - codes will stay deleted on refresh');
+
 // Clear any globally used codes
 localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
 console.log('Cleared global code usage data');

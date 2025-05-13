@@ -337,6 +337,9 @@ const Admin = () => {
   const clearAllCodes = () => {
     if (window.confirm('Are you sure you want to delete ALL codes from the database? This cannot be undone!')) {
       try {
+        // Set a permanent deletion flag
+        localStorage.setItem('permanent_code_deletion', 'true');
+        
         // Clear codes from all possible localStorage keys
         localStorage.setItem('mockDb_codes', JSON.stringify([]));
         
@@ -364,7 +367,7 @@ const Admin = () => {
         fetchCodes();
         
         // Show success message
-        toast.success('All codes have been completely erased from storage', {
+        toast.success('All codes have been permanently erased and will stay deleted on refresh', {
           position: 'top-right',
           autoClose: 3000
         });
@@ -443,6 +446,9 @@ const Admin = () => {
   const enableCodeGeneration = () => {
     // Remove the deletion timestamp
     localStorage.removeItem('codes_last_deleted');
+    
+    // Remove the permanent deletion flag
+    localStorage.removeItem('permanent_code_deletion');
     
     // Show success message
     toast.success('Code generation has been re-enabled', {

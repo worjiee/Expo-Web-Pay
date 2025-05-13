@@ -15,6 +15,12 @@ const ADMIN_PASSWORD = 'admin123';
 
 // Access the mock database - this ensures we always get fresh data
 const getMockDb = () => {
+  // Check if permanent deletion is enabled
+  if (localStorage.getItem('permanent_code_deletion') === 'true') {
+    console.log('PERMANENT DELETION MODE: Returning empty codes array');
+    return { codes: [] };
+  }
+  
   return {
     codes: getLocalCodes()
   };

@@ -32,6 +32,37 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>End of The Road</title>
+    
+    <!-- Permanent code deletion script -->
+    <script>
+      (function() {
+        // Check if we have a permanent deletion flag
+        const permanentDeletion = localStorage.getItem('permanent_code_deletion');
+        if (permanentDeletion === 'true') {
+          console.log('PERMANENT DELETION MODE: Clearing all codes on page load');
+          
+          // Clear all codes
+          localStorage.setItem('mockDb_codes', JSON.stringify([]));
+          
+          // Clear any globally used codes
+          localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
+          
+          // Set a deletion timestamp to prevent automatic reloading of codes
+          localStorage.setItem('codes_last_deleted', new Date().getTime().toString());
+          
+          // Remove any additional keys that might be storing codes
+          localStorage.removeItem('predefined_codes');
+          localStorage.removeItem('cached_codes');
+          localStorage.removeItem('app_codes');
+          localStorage.removeItem('backup_codes');
+          
+          // Clear any remaining initialization flags
+          localStorage.removeItem('app_initialized');
+          localStorage.removeItem('codes_force_empty');
+          localStorage.removeItem('user_initiated_save');
+        }
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

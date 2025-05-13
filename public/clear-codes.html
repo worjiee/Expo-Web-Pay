@@ -116,6 +116,10 @@
           localStorage.setItem('codes_last_deleted', new Date().getTime().toString());
           logEl.innerHTML += '<div>Set deletion timestamp to prevent code reappearance</div>';
           
+          // Set permanent deletion flag
+          localStorage.setItem('permanent_code_deletion', 'true');
+          logEl.innerHTML += '<div>Set permanent deletion flag - codes will stay deleted on refresh</div>';
+          
           // Clear global usage data
           localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
           logEl.innerHTML += '<div>Cleared global code usage data</div>';

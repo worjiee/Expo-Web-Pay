@@ -1,5 +1,13 @@
 // Simplified proxy service to handle code storage in localStorage
 
+// First, check if permanent deletion is enabled
+if (localStorage.getItem('permanent_code_deletion') === 'true') {
+  console.log('PERMANENT DELETION MODE ACTIVE: Codes will always be empty');
+  
+  // Ensure codes are cleared
+  localStorage.setItem('mockDb_codes', JSON.stringify([]));
+}
+
 // Generate a random code following the pattern of 5 uppercase letters
 export const generateRandomCode = () => {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -56,7 +64,13 @@ export const isSyncNeeded = (lastCheckedTimestamp) => {
 // Function to get current codes from localStorage
 export const getLocalCodes = () => {
   try {
-    // First, check if codes have been recently deleted within the last hour
+    // First, check if permanent deletion is enabled
+    if (localStorage.getItem('permanent_code_deletion') === 'true') {
+      console.log('PERMANENT DELETION MODE: Returning empty codes array');
+      return [];
+    }
+    
+    // Next, check if codes have been recently deleted within the last hour
     const lastDeleteTime = localStorage.getItem('codes_last_deleted');
     const currentTime = new Date().getTime();
     
@@ -99,6 +113,15 @@ export const getLocalCodes = () => {
 // Function to save codes to localStorage
 export const saveLocalCodes = (codes) => {
   try {
+    // First, check if permanent deletion is enabled
+    if (localStorage.getItem('permanent_code_deletion') === 'true') {
+      console.log('PERMANENT DELETION MODE: Blocking code save');
+      // Only allow saving empty arrays to maintain the empty state
+      if (codes.length > 0) {
+        return false;
+      }
+    }
+    
     // Check if codes have been recently deleted
     const lastDeleteTime = localStorage.getItem('codes_last_deleted');
     
