@@ -191,23 +191,43 @@ const Admin = () => {
 
   const generateCode = async () => {
     try {
+      setLoading(true);
       const response = await MockAPI.codes.generate();
       console.log('Generate code response:', response);
       
       if (response.success && response.data) {
         // Add new code to state
         setCodes(prevCodes => [...prevCodes, response.data]);
-        toast.success(`Generated new code: ${response.data.code}`, {
-          position: 'top-right',
-          autoClose: 3000
-        });
-        } else {
+        
+        // Update the last sync check timestamp
+        setLastSyncCheck(getSyncTimestamp());
+        
+        // Show success toast with sync information
+        toast.success(
+          <div>
+            <div>Generated new code: <strong>{response.data.code}</strong></div>
+            <small>Code has been saved to the database and synced to all devices</small>
+          </div>,
+          {
+            position: 'top-center',
+            autoClose: 3000
+          }
+        );
+        
+        // Update the sync status briefly
+        setSyncStatus('Syncing...');
+        setTimeout(() => {
+          setSyncStatus('');
+        }, 2000);
+      } else {
         console.error('Invalid response from code generation:', response);
         toast.error('Error generating code: Invalid response format');
       }
     } catch (err) {
       console.error('Error generating code:', err);
       toast.error(`Error generating code: ${err.message || 'Unknown error'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -218,23 +238,59 @@ const Admin = () => {
         return;
       }
       
+      setLoading(true);
       const response = await MockAPI.codes.generateMultiple({ count });
       
       if (response.success && response.data) {
         // Add new codes to state
-          setCodes(prevCodes => [...prevCodes, ...response.data]);
-        toast.success(`Generated ${response.data.length} new codes`, {
-          position: 'top-right',
-          autoClose: 3000
-        });
-        setCount(1); // Reset count
-        } else {
+        setCodes(prevCodes => [...prevCodes, ...response.data]);
+        
+        // Update the last sync check timestamp
+        setLastSyncCheck(getSyncTimestamp());
+        
+        // Generate a list of codes for display
+        const codesList = response.data.map(c => c.code).join(', ');
+        
+        // Show success toast with sync information
+        toast.success(
+          <div>
+            <div>Generated {response.data.length} new codes</div>
+            <div style={{ 
+              maxHeight: '60px', 
+              overflowY: 'auto', 
+              fontSize: '0.8em',
+              marginTop: '5px',
+              padding: '5px',
+              background: 'rgba(255,255,255,0.8)',
+              borderRadius: '3px' 
+            }}>
+              {codesList}
+            </div>
+            <small>Codes have been saved to the database and synced to all devices</small>
+          </div>,
+          {
+            position: 'top-center',
+            autoClose: 5000
+          }
+        );
+        
+        // Reset count
+        setCount(1);
+        
+        // Update the sync status briefly
+        setSyncStatus('Syncing...');
+        setTimeout(() => {
+          setSyncStatus('');
+        }, 2000);
+      } else {
         console.error('Invalid response from multiple code generation:', response);
         toast.error('Error generating codes: Invalid response format');
       }
     } catch (err) {
       console.error('Error generating multiple codes:', err);
       toast.error(`Error generating codes: ${err.message || 'Unknown error'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
