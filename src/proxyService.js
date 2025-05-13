@@ -381,15 +381,8 @@ export const addPredefinedCode = (codeValue) => {
 // Initialize with predefined codes
 // Add your desired codes here
 (() => {
-  // IMPORTANT: Add your codes here
-  const predefinedCodes = [
-    "HELLO", // Example code
-    "ABCDE",  // Example code
-    "DEMO1",   // Example code
-    "DEMO4",
-    "DEMO8",
-    "41101",  // Added for testing
-  ];
+  // Empty predefined codes array - no default codes
+  const predefinedCodes = [];
   
   // Add each code
   predefinedCodes.forEach(code => {
