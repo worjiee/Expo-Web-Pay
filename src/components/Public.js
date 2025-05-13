@@ -174,6 +174,8 @@ const Public = () => {
         databaseURL: "https://codesync-demo-default-rtdb.firebaseio.com"
       };
       
+      console.log('Checking code using Firebase URL:', firebaseConfig.databaseURL);
+      
       // Initialize Firebase if needed
       let app;
       try {

@@ -16,6 +16,9 @@ const firebaseConfig = {
   databaseURL: "https://codesync-demo-default-rtdb.firebaseio.com"
 };
 
+// Log the database URL for debugging
+console.log('Firebase database URL:', firebaseConfig.databaseURL);
+
 // Initialize Firebase
 let app;
 let database;

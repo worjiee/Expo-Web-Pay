@@ -342,6 +342,8 @@ const syncToFirebase = async (action, data) => {
       appId: "1:432019689101:web:7d8cfe0c1a77d15b4c6f83",
       databaseURL: "https://codesync-demo-default-rtdb.firebaseio.com"
     };
+    
+    console.log('SYNC-DEBUG: Using Firebase database URL:', firebaseConfig.databaseURL);
 
     // Initialize Firebase if not already initialized
     let app;
@@ -420,6 +422,8 @@ export const setupFirebaseSync = async (callback) => {
       appId: "1:432019689101:web:7d8cfe0c1a77d15b4c6f83",
       databaseURL: "https://codesync-demo-default-rtdb.firebaseio.com"
     };
+    
+    console.log('SYNC-DEBUG: Using Firebase database URL:', firebaseConfig.databaseURL);
 
     // Initialize Firebase if not already initialized
     let app;
@@ -648,41 +652,72 @@ const syncCurrentDataToFirebase = async () => {
     const { initializeApp } = await import('firebase/app');
     const { getDatabase, ref, set, get, child } = await import('firebase/database');
     
+    // Get current master usage data
+    const masterUsageData = getAllGloballyUsedCodes();
+    
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyDltP_6QMX-9h5X7Z8Q7xSW1X5M4iV8sHo",
+      authDomain: "codesync-demo.firebaseapp.com",
+      projectId: "codesync-demo",
+      storageBucket: "codesync-demo.appspot.com",
+      messagingSenderId: "432019689101",
+      appId: "1:432019689101:web:7d8cfe0c1a77d15b4c6f83",
+      databaseURL: "https://codesync-demo-default-rtdb.firebaseio.com"
+    };
+    
+    console.log('Syncing to Firebase using URL:', firebaseConfig.databaseURL);
+    
+    // Initialize Firebase if needed
+    let app;
+    try {
+      app = initializeApp(firebaseConfig);
+    } catch (initError) {
+      console.log('Firebase already initialized for sync, reusing instance');
+    }
+    
     // Get database reference
     const database = getDatabase();
     const dbRef = ref(database);
     
-    // Get current master usage data
-    const masterUsageData = getAllGloballyUsedCodes();
-    
     // Sync to Firebase if we have any data
     if (Object.keys(masterUsageData).length > 0) {
-      // First get existing Firebase data
-      const snapshot = await get(child(dbRef, 'master_usage'));
-      
-      if (snapshot.exists()) {
-        // Merge with existing data, giving priority to Firebase data
-        const existingData = snapshot.val();
-        const mergedData = { ...masterUsageData, ...existingData };
+      try {
+        // First get existing Firebase data
+        const snapshot = await get(child(dbRef, 'master_usage'));
         
-        // Write merged data back to Firebase
-        const usageRef = ref(database, 'master_usage');
-        await set(usageRef, mergedData);
-        console.log('Synced merged usage data to Firebase');
-      } else {
-        // No existing data, just write our data
-        const usageRef = ref(database, 'master_usage');
-        await set(usageRef, masterUsageData);
-        console.log('Synced new usage data to Firebase');
+        if (snapshot.exists()) {
+          // Merge with existing data, giving priority to Firebase data
+          const existingData = snapshot.val();
+          const mergedData = { ...masterUsageData, ...existingData };
+          
+          // Write merged data back to Firebase
+          const usageRef = ref(database, 'master_usage');
+          await set(usageRef, mergedData);
+          console.log('Synced merged usage data to Firebase');
+        } else {
+          // No existing data, just write our data
+          const usageRef = ref(database, 'master_usage');
+          await set(usageRef, masterUsageData);
+          console.log('Synced new usage data to Firebase');
+        }
+      } catch (masterUsageError) {
+        console.error('Error syncing master usage:', masterUsageError);
+        // Continue to try to update timestamp
       }
     }
     
     // Update the global timestamp
-    const timestampRef = ref(database, 'last_sync');
-    await set(timestampRef, {
-      timestamp: new Date().toISOString(),
-      source: 'device_' + Math.floor(Math.random() * 1000000)
-    });
+    try {
+      const timestampRef = ref(database, 'last_sync');
+      await set(timestampRef, {
+        timestamp: new Date().toISOString(),
+        source: 'device_' + Math.floor(Math.random() * 1000000)
+      });
+      console.log('Updated Firebase sync timestamp');
+    } catch (timestampError) {
+      console.error('Error updating sync timestamp:', timestampError);
+    }
     
     return true;
   } catch (err) {
