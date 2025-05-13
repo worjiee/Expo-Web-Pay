@@ -366,6 +366,17 @@ const MockAPI = {
       await new Promise(resolve => setTimeout(resolve, 300));
       
       try {
+        console.log('Deleting code with ID:', codeId);
+        
+        // Make sure we have a valid ID
+        if (!codeId) {
+          console.error('Invalid code ID provided');
+          return {
+            success: false,
+            message: 'Invalid code ID'
+          };
+        }
+        
         // Use Firebase to delete the code
         const result = await deleteCode(codeId);
         

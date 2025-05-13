@@ -285,15 +285,24 @@ const Admin = () => {
     }
   };
 
-  const deleteCode = async (codeToDelete) => {
+  const deleteCode = async (codeId) => {
     try {
-      const response = await MockAPI.codes.delete({ code: codeToDelete });
+      // Make sure we have a valid code ID
+      if (!codeId) {
+        toast.error('Invalid code ID');
+        return;
+      }
+      
+      const response = await MockAPI.codes.delete(codeId);
       
       if (response.success) {
-        toast.success(`Deleted code: ${codeToDelete}`, {
+        toast.success('Code deleted successfully', {
           position: 'top-right',
           autoClose: 3000
         });
+        
+        // Refresh the codes list
+        fetchCodes();
       } else {
         console.error('Error deleting code:', response);
         toast.error(`Error deleting code: ${response.message || 'Unknown error'}`);
@@ -673,7 +682,7 @@ const Admin = () => {
                         <td>
                           <button 
                             className="btn btn-sm btn-danger" 
-                            onClick={() => deleteCode(code.code)}
+                            onClick={() => deleteCode(code.id || code._id)}
                           >
                             <i className="fas fa-trash-alt"></i>
                           </button>
