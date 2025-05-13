@@ -6,13 +6,13 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyDPZ1XCWiXjKMCGKXz2XgugNEwXo6QzDNk",
-  authDomain: "eotrwebpay.firebaseapp.com",
-  databaseURL: "https://eotrwebpay-default-rtdb.firebaseio.com",
-  projectId: "eotrwebpay",
-  storageBucket: "eotrwebpay.appspot.com",
-  messagingSenderId: "335115752880",
-  appId: "1:335115752880:web:13ce0e9ea96bd662f78e98"
+  apiKey: "AIzaSyBVOAQZlG5djqUQVP1AdgERD1WZZB2fvY0",
+  authDomain: "websitepay-2681c.firebaseapp.com",
+  databaseURL: "https://websitepay-2681c-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "websitepay-2681c",
+  storageBucket: "websitepay-2681c.appspot.com",
+  messagingSenderId: "728732104278",
+  appId: "1:728732104278:web:5b2bfcb7bc8a50f7baf5d9"
 };
 
 // Initialize Firebase
