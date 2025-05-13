@@ -3,7 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { toast, ToastContainer } from 'react-toastify';
 import MockAPI from '../MockAPI'; // Use MockAPI directly
 import { Link } from 'react-router-dom';
-import { getLocalCodes, saveLocalCodes } from '../proxyService';
+import { 
+  getLocalCodes, 
+  saveLocalCodes, 
+  getCodeSyncChannel, 
+  getSyncTimestamp, 
+  isSyncNeeded,
+  setupBroadcastListener,
+  startPollingSync,
+  stopPollingSync,
+  updateSyncTimestamp,
+  setupFirebaseSync
+} from '../proxyService';
+import FirebaseSync from '../firebaseConfig';
 
 const Admin = () => {
   const [codes, setCodes] = useState([]);
@@ -15,7 +27,20 @@ const Admin = () => {
   const [fadeIn, setFadeIn] = useState(false);
   const [file, setFile] = useState(null);
   const [syncLink, setSyncLink] = useState('');
+  const [syncStatus, setSyncStatus] = useState('');
   const navigate = useNavigate();
+  
+  // Add state for last update timestamp
+  const [lastUpdated, setLastUpdated] = useState(null);
+  
+  // Add state for last sync check timestamp
+  const [lastSyncCheck, setLastSyncCheck] = useState(null);
+  
+  // Add state for real-time update status
+  const [realtimeStatus, setRealtimeStatus] = useState('initializing');
+  
+  // Add state for Firebase connection status
+  const [firebaseConnected, setFirebaseConnected] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -27,27 +52,142 @@ const Admin = () => {
       navigate('/login');
       return;
     }
+    
+    // Initial fetch
     fetchCodes();
     setFadeIn(true);
     
-    // Set up a simple interval to refresh codes every 10 seconds
-    const refreshInterval = setInterval(() => {
-      fetchCodes();
-    }, 10000);
+    // Set initial sync timestamp
+    setLastSyncCheck(getSyncTimestamp());
+    
+    // Setup the broadcast channel listener for real-time updates
+    const broadcastListenerSet = setupBroadcastListener((message) => {
+      console.log('Broadcast message received in Admin component:', message);
+      
+      // Handle different message types
+      switch (message.action) {
+        case 'CODE_USED_GLOBALLY':
+          // Show a toast notification when a code is used
+          toast.info(`Code ${message.data.code} was verified on another device`, {
+            position: 'top-right',
+            autoClose: 3000
+          });
+          // Refresh codes list when a code status changes
+          console.log('Code status changed, refreshing codes list');
+          fetchCodes(false); // Don't show loading indicator for automatic refreshes
+          break;
+        case 'CODE_STATUS_CHANGED':
+          // Show a toast notification for status changes
+          toast.info(`Code ${message.data.code} status changed to ${message.data.used ? 'used' : 'unused'}`, {
+            position: 'top-right',
+            autoClose: 3000
+          });
+          // Refresh codes list
+          fetchCodes(false);
+          break;
+        case 'SYNC_TIMESTAMP_UPDATED':
+          // Silent update for timestamp changes
+          setLastSyncCheck(getSyncTimestamp());
+          break;
+        case 'CODES_UPDATED':
+          toast.info('Code database updated', {
+            position: 'top-right',
+            autoClose: 3000
+          });
+          fetchCodes(false);
+          break;
+        case 'CODE_ADDED':
+          toast.success(`New code ${message.data.code} added`, {
+            position: 'top-right',
+            autoClose: 3000
+          });
+          fetchCodes(false);
+          break;
+        case 'CODES_IMPORTED':
+          if (message.data.count > 0) {
+            toast.success(`${message.data.count} codes imported on another device`, {
+              position: 'top-right',
+              autoClose: 3000
+            });
+          }
+          fetchCodes(false);
+          break;
+        case 'FIREBASE_SYNC':
+          // Firebase sync updates
+          toast.info(`Firebase sync: ${message.data.type}`, {
+            position: 'top-right',
+            autoClose: 2000
+          });
+          fetchCodes(false);
+          setFirebaseConnected(true);
+          break;
+        default:
+          // For any other updates, check if sync is needed
+          if (isSyncNeeded(lastSyncCheck)) {
+            console.log('Sync needed based on timestamp, refreshing codes list');
+            fetchCodes(false);
+            setLastSyncCheck(getSyncTimestamp());
+          }
+      }
+    });
+    
+    // Setup Firebase for cross-device sync
+    const initFirebase = async () => {
+      const firebaseInitialized = await setupFirebaseSync((message) => {
+        console.log('Firebase sync message in Admin component:', message);
+        
+        // Set firebase connection status
+        setFirebaseConnected(true);
+        
+        // Handle Firebase sync events
+        if (message.action === 'FIREBASE_SYNC') {
+          // Update UI
+          setSyncStatus('Firebase sync active');
+          // Refresh codes list
+          fetchCodes(false);
+          // Update last sync check
+          setLastSyncCheck(getSyncTimestamp());
+          
+          // Show toast notification
+          toast.info(`Cross-device sync: ${message.data.type}`, {
+            position: 'top-right',
+            autoClose: 2000
+          });
+        }
+      });
+      
+      setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
+    };
+    
+    // Initialize Firebase sync
+    initFirebase();
+    
+    // Start polling for sync across devices (every 2 seconds)
+    startPollingSync(() => {
+      console.log('Admin component - polling refresh triggered');
+      fetchCodes(false);
+    }, 2000);
     
     // Clean up interval when component unmounts
     return () => {
-      clearInterval(refreshInterval);
+      // Stop polling when component unmounts
+      stopPollingSync();
     };
-  }, [navigate]);
+  }, [navigate, lastSyncCheck]);
 
-  const fetchCodes = async () => {
+  const fetchCodes = async (showLoading = true) => {
     try {
+      if (showLoading) {
       setLoading(true);
+      }
       // Use MockAPI directly
       const response = await MockAPI.codes.getAll();
       if (response.success && response.data) {
         setCodes(response.data);
+        // Update the last updated timestamp
+        setLastUpdated(new Date());
+        // Update the last sync check timestamp
+        setLastSyncCheck(getSyncTimestamp());
       } else {
         console.error('Error in fetchCodes response format:', response);
         setError('Error fetching codes: Invalid response format');
@@ -55,6 +195,12 @@ const Admin = () => {
     } catch (err) {
       console.error('Error fetching codes:', err);
       setError('Error fetching codes: ' + (err.message || 'Unknown error'));
+      
+      if (!showLoading) {
+        // Don't show toast for background refreshes
+        return;
+      }
+      
       toast.error('Error fetching codes');
       
       // If it's an authentication error
@@ -67,15 +213,17 @@ const Admin = () => {
         navigate('/login');
       }
     } finally {
+      if (showLoading) {
       setLoading(false);
+      }
     }
   };
 
   const handleLogout = async () => {
     try {
       await MockAPI.auth.logout();
-      toast.info('Logged out successfully');
-      navigate('/login');
+    toast.info('Logged out successfully');
+    navigate('/login');
     } catch (err) {
       console.error('Error during logout:', err);
       localStorage.removeItem('auth_token');
@@ -95,7 +243,7 @@ const Admin = () => {
           position: 'top-right',
           autoClose: 3000
         });
-      } else {
+        } else {
         console.error('Invalid response from code generation:', response);
         toast.error('Error generating code: Invalid response format');
       }
@@ -116,13 +264,13 @@ const Admin = () => {
       
       if (response.success && response.data) {
         // Add new codes to state
-        setCodes(prevCodes => [...prevCodes, ...response.data]);
+          setCodes(prevCodes => [...prevCodes, ...response.data]);
         toast.success(`Generated ${response.data.length} new codes`, {
           position: 'top-right',
           autoClose: 3000
         });
         setCount(1); // Reset count
-      } else {
+        } else {
         console.error('Invalid response from multiple code generation:', response);
         toast.error('Error generating codes: Invalid response format');
       }
@@ -133,47 +281,66 @@ const Admin = () => {
   };
 
   const createCustomCode = async () => {
+    if (!customCode) {
+      toast.error('Please enter a custom code', { 
+        position: 'top-right',
+        autoClose: 3000
+      });
+      return;
+    }
+    
     try {
-      if (!customCode || customCode.trim() === '') {
-        toast.error('Please enter a valid code');
-        return;
-      }
+      setLoading(true);
       
-      // Create custom code in correct format
-      const formattedCode = customCode.trim().toUpperCase();
+      // Execute the create code API call
+      await MockAPI.codes.create({ 
+        code: customCode.trim().toUpperCase(),
+      });
       
-      // Check if code already exists
-      const existingCode = codes.find(c => c.code.toUpperCase() === formattedCode);
-      if (existingCode) {
-        toast.error(`Code "${formattedCode}" already exists!`);
-        return;
-      }
-      
-      // Create new code object
-      const newCode = {
-        id: codes.length > 0 ? Math.max(...codes.map(c => c.id)) + 1 : 1,
-        code: formattedCode,
-        used: false,
-        generatedAt: new Date().toISOString(),
-        usedAt: null
-      };
-      
-      // Add to codes array
-      const updatedCodes = [...codes, newCode];
-      
-      // Save to localStorage
-      saveLocalCodes(updatedCodes);
-      
-      // Update state
-      setCodes(updatedCodes);
+      // Refresh codes list
+      fetchCodes();
       
       // Clear input
       setCustomCode('');
       
-      toast.success(`Created custom code: ${formattedCode}`);
+      // Show success message
+      toast.success('Custom code created successfully', { 
+        position: 'top-right',
+        autoClose: 3000
+      });
     } catch (err) {
       console.error('Error creating custom code:', err);
-      toast.error(`Error creating custom code: ${err.message || 'Unknown error'}`);
+      toast.error(err.message || 'Error creating custom code', { 
+        position: 'top-right',
+        autoClose: 3000
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Function to clear all codes from localStorage
+  const clearAllCodes = () => {
+    if (window.confirm('Are you sure you want to delete ALL codes from the database? This cannot be undone!')) {
+      try {
+        // Clear codes directly from localStorage
+        localStorage.setItem('mockDb_codes', JSON.stringify([]));
+        
+        // Refresh codes list
+        fetchCodes();
+        
+        // Show success message
+        toast.success('All codes have been deleted', {
+          position: 'top-right',
+          autoClose: 3000
+        });
+    } catch (err) {
+        console.error('Error clearing codes:', err);
+        toast.error('Error clearing codes: ' + err.message, {
+          position: 'top-right',
+          autoClose: 3000
+        });
+      }
     }
   };
 
@@ -188,11 +355,11 @@ const Admin = () => {
           position: 'top-right',
           autoClose: 3000
         });
-      } else {
+        } else {
         console.error('Error deleting code:', response);
         toast.error(`Error deleting code: ${response.message || 'Unknown error'}`);
-      }
-    } catch (err) {
+        }
+      } catch (err) {
       console.error('Error deleting code:', err);
       toast.error(`Error deleting code: ${err.message || 'Unknown error'}`);
     }
@@ -200,11 +367,11 @@ const Admin = () => {
 
   const deleteAllCodes = async () => {
     if (window.confirm('Are you sure you want to delete ALL codes? This cannot be undone!')) {
-      try {
+    try {
         const response = await MockAPI.codes.deleteAll();
         
         if (response.success) {
-          setCodes([]);
+      setCodes([]);
           toast.success('All codes deleted successfully', {
             position: 'top-right',
             autoClose: 3000
@@ -213,10 +380,84 @@ const Admin = () => {
           console.error('Error deleting all codes:', response);
           toast.error(`Error deleting all codes: ${response.message || 'Unknown error'}`);
         }
-      } catch (err) {
+    } catch (err) {
         console.error('Error deleting all codes:', err);
         toast.error(`Error deleting all codes: ${err.message || 'Unknown error'}`);
       }
+    }
+  };
+
+  // Function to manually trigger sync
+  const forceSync = () => {
+    // Update the timestamp to trigger sync on other devices
+    updateSyncTimestamp();
+    
+    // Fetch fresh codes
+    fetchCodes();
+    
+    // Show a toast notification
+    toast.info('Syncing codes with all devices...', {
+      position: 'top-right',
+      autoClose: 2000
+    });
+    
+    // Update sync status
+    setSyncStatus('Syncing...');
+    
+    // Clear sync status after 2 seconds
+    setTimeout(() => {
+      setSyncStatus(firebaseConnected ? 'Firebase sync active' : '');
+    }, 2000);
+  };
+
+  // Function to explicitly enable Firebase sync across devices
+  const enableFirebaseSync = async () => {
+    try {
+      setSyncStatus('Enabling Firebase Sync...');
+      const firebaseInitialized = await setupFirebaseSync((message) => {
+        console.log('Firebase sync message in Admin component:', message);
+        
+        // Set firebase connection status
+        setFirebaseConnected(true);
+        
+        // Handle Firebase sync events
+        if (message.action === 'FIREBASE_SYNC') {
+          // Update UI
+          setSyncStatus('Firebase sync active');
+          // Refresh codes list
+          fetchCodes(false);
+          // Update last sync check
+          setLastSyncCheck(getSyncTimestamp());
+          
+          // Show toast notification
+          toast.info(`Cross-device sync: ${message.data.type}`, {
+            position: 'top-right',
+            autoClose: 2000
+          });
+        }
+      });
+      
+      if (firebaseInitialized) {
+        setFirebaseConnected(true);
+        setSyncStatus('Firebase sync active');
+        toast.success('Firebase sync enabled. Codes will sync across all devices.', {
+          position: 'top-right',
+          autoClose: 3000
+        });
+      } else {
+        setSyncStatus('');
+        toast.error('Failed to enable Firebase sync.', {
+          position: 'top-right',
+          autoClose: 3000
+        });
+      }
+    } catch (err) {
+      console.error('Error enabling Firebase sync:', err);
+      setSyncStatus('');
+      toast.error(`Error enabling Firebase sync: ${err.message || 'Unknown error'}`, {
+        position: 'top-right',
+        autoClose: 3000
+      });
     }
   };
 
@@ -329,6 +570,7 @@ const Admin = () => {
             <h2 className="mb-0">Admin Dashboard</h2>
           </div>
           <div className="card-body">
+            <div className="d-flex align-items-center justify-content-between">
             <div className="d-flex align-items-center">
               <div className="me-3" style={{
                 width: '50px',
@@ -344,12 +586,48 @@ const Admin = () => {
               <div>
                 <h5 className="mb-0">Welcome, Admin</h5>
                 <p className="text-muted mb-0">Manage your game access codes</p>
+                </div>
+              </div>
+              <div>
+                <div>
+                  <button 
+                    className="btn btn-info me-2"
+                    onClick={forceSync}
+                    disabled={syncStatus === 'Syncing...'}
+                  >
+                    <i className="fas fa-sync-alt me-2"></i>
+                    {syncStatus || 'Force Sync'}
+                  </button>
+                  
+                  {!firebaseConnected && (
+                    <button 
+                      className="btn btn-success"
+                      onClick={enableFirebaseSync}
+                      disabled={syncStatus === 'Enabling Firebase Sync...'}
+                    >
+                      <i className="fas fa-cloud-upload-alt me-2"></i>
+                      Enable Cross-Device Sync
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             <div className="mt-3">
               <div className="alert alert-info">
                 <i className="fas fa-info-circle me-2"></i>
-                <strong>Info:</strong> Codes are now persistent and will be saved in your browser.
+                <strong>Info:</strong> Codes are automatically synchronized across all your devices.
+                {firebaseConnected && (
+                  <span className="ms-2 badge bg-success">
+                    <i className="fas fa-cloud-upload-alt me-1"></i>
+                    Firebase Sync Active
+                  </span>
+                )}
+                {!firebaseConnected && (
+                  <span className="ms-2 badge bg-warning text-dark">
+                    <i className="fas fa-exclamation-triangle me-1"></i>
+                    Local Sync Only
+                  </span>
+                )}
               </div>
               <div className="row mt-3">
                 <div className="col">
@@ -413,158 +691,23 @@ const Admin = () => {
           <div className="col-md-6">
             <div className="card">
               <div className="card-header">
-                <h5>Add Custom Codes</h5>
+                <h5>Add New Code</h5>
               </div>
               <div className="card-body">
                 <div className="input-group mb-3">
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="Enter custom code"
+                    placeholder="Enter code (5 letters recommended)"
                     value={customCode}
                     onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
+                    maxLength={5}
                   />
                   <button className="btn btn-primary" onClick={createCustomCode}>
-                    Create Custom Code
+                    Add Code
                   </button>
                 </div>
-                
-                <div className="form-group">
-                  <label>Import Codes from Link</label>
-                  <div className="input-group mb-3">
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Paste shared code link here"
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Try to extract the import parameter from the URL
-                        try {
-                          // Check if it's a URL or just the import parameter
-                          let importParam;
-                          if (value.includes('?import=')) {
-                            const url = new URL(value);
-                            importParam = url.searchParams.get('import');
-                          } else {
-                            // Assume it's just the encoded data
-                            importParam = value;
-                          }
-                          
-                          if (importParam) {
-                            // Decode the base64 encoded codes
-                            const codesData = JSON.parse(atob(importParam));
-                            
-                            if (Array.isArray(codesData) && codesData.length > 0) {
-                              // Add the codes to our state
-                              let added = 0;
-                              const updatedCodes = [...codes];
-                              
-                              codesData.forEach(newCode => {
-                                const codeExists = codes.some(c => c.code === newCode.code);
-                                if (!codeExists) {
-                                  // Convert the imported code to the format needed
-                                  const codeToAdd = {
-                                    id: newCode.id || Math.floor(Math.random() * 100000),
-                                    code: newCode.code,
-                                    used: false,
-                                    createdAt: newCode.createdAt || new Date().toISOString()
-                                  };
-                                  updatedCodes.push(codeToAdd);
-                                  added++;
-                                  
-                                  // Also create the code via API to ensure persistence
-                                  try {
-                                    MockAPI.codes.create(codeToAdd);
-                                  } catch (err) {
-                                    console.error('Error adding imported code:', err);
-                                  }
-                                }
-                              });
-                              
-                              // Update the codes state
-                              setCodes(updatedCodes);
-                              
-                              // Show success message
-                              if (added > 0) {
-                                toast.success(`Successfully imported ${added} new codes.`);
-                                // Clear the input
-                                e.target.value = '';
-                              } else {
-                                toast.info('No new codes were imported. You may already have these codes.');
-                              }
-                            }
-                          }
-                        } catch (err) {
-                          console.error('Error importing codes from link:', err);
-                          if (value.length > 10) {
-                            toast.error('Invalid code import link. Please check the format.');
-                          }
-                        }
-                      }}
-                    />
-                    <button 
-                      className="btn btn-info"
-                      onClick={() => {
-                        // Display instructions
-                        toast.info(
-                          <div>
-                            <h6>How to Import Codes:</h6>
-                            <ol className="ps-3 mb-0">
-                              <li>On another device, use the "Share Codes" button.</li>
-                              <li>Copy the shared link.</li>
-                              <li>Paste it in the field above.</li>
-                            </ol>
-                          </div>, 
-                          { autoClose: 8000 }
-                        );
-                      }}
-                    >
-                      <i className="fas fa-question-circle"></i>
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="form-group">
-                  <label>Bulk Import Codes (one per line)</label>
-                  <textarea
-                    className="form-control mb-2"
-                    rows="5"
-                    placeholder="Enter codes, one per line"
-                    value={bulkCodes}
-                    onChange={(e) => setBulkCodes(e.target.value)}
-                  ></textarea>
-                  <button 
-                    className="btn btn-primary w-100" 
-                    onClick={() => {
-                      // Split the text into lines and process each code
-                      const codeLines = bulkCodes.split('\n')
-                        .map(line => line.trim())
-                        .filter(line => line.length > 0);
-                      
-                      if (codeLines.length === 0) {
-                        toast.error('Please enter at least one code');
-                        return;
-                      }
-                      
-                      // Process each code
-                      codeLines.forEach(async (code) => {
-                        try {
-                          await MockAPI.codes.create({ code: code.toUpperCase() });
-                        } catch (err) {
-                          console.error('Error adding bulk code:', code, err);
-                        }
-                      });
-                      
-                      // Clear the textarea and show success message
-                      setBulkCodes('');
-                      toast.success(`${codeLines.length} codes imported successfully`);
-                      fetchCodes();
-                    }}
-                    disabled={loading}
-                  >
-                    {loading ? 'Importing...' : 'Import Codes'}
-                  </button>
-                </div>
+                <small className="text-muted">Added codes will work on all devices.</small>
               </div>
             </div>
           </div>
@@ -572,7 +715,14 @@ const Admin = () => {
 
         <div className="card">
           <div className="card-header d-flex justify-content-between align-items-center">
+            <div>
             <h5>Code Database</h5>
+              {lastUpdated && (
+                <small className="text-muted">
+                  Last updated: {lastUpdated.toLocaleTimeString()}
+                </small>
+              )}
+            </div>
             <div>
               <div className="btn-group">
                 <button
@@ -580,9 +730,9 @@ const Admin = () => {
                   onClick={() => {
                     // Export codes as CSV
                     const csvContent = "data:text/csv;charset=utf-8," 
-                      + "ID,Code,Status,CreatedAt,UsedAt\n"
+                      + "ID,Code,Status,GeneratedAt,UsedAt\n"
                       + codes.map(c => {
-                          return `${c.id || c._id},"${c.code}","${(c.used || c.isUsed) ? 'Used' : 'Available'}","${c.createdAt || 'N/A'}","${c.usedAt || 'N/A'}"`;
+                          return `${c.id || c._id},"${c.code}","${(c.used || c.isUsed) ? 'Used' : 'Available'}","${c.generatedAt || c.createdAt || 'N/A'}","${c.usedAt || 'N/A'}"`;
                         }).join("\n");
                     
                     const encodedUri = encodeURI(csvContent);
@@ -604,7 +754,55 @@ const Admin = () => {
                   className="btn btn-outline-primary"
                   onClick={() => {
                     // Implementation for sharing codes between devices
-                    console.log('Implement sharing codes between devices');
+                    try {
+                      // Filter only unused codes for sharing
+                      const unusedCodes = codes.filter(c => !c.used && !c.isUsed);
+                      
+                      if (unusedCodes.length === 0) {
+                        toast.error('No unused codes available to share');
+                        return;
+                      }
+                      
+                      // Convert the codes to a shareable format
+                      const shareCodes = unusedCodes.map(c => ({
+                        id: c.id,
+                        code: c.code,
+                        used: false,
+                        generatedAt: c.generatedAt
+                      }));
+                      
+                      // Convert to Base64 string for sharing
+                      const encodedCodes = btoa(JSON.stringify(shareCodes));
+                      
+                      // Create a shareable link
+                      const shareLink = `${window.location.origin}?import=${encodedCodes}`;
+                      
+                      // Copy to clipboard
+                      navigator.clipboard.writeText(shareLink)
+                        .then(() => {
+                          toast.success('Share link copied to clipboard! Paste this link on your other device.');
+                        })
+                        .catch(err => {
+                          console.error('Could not copy to clipboard:', err);
+                          // Show the link in a modal as fallback
+                          toast.info(
+                            <div>
+                              <p>Copy this link manually:</p>
+                              <input 
+                                type="text"
+                                className="form-control form-control-sm mt-2"
+                                value={shareLink}
+                                onClick={(e) => e.target.select()}
+                                readOnly
+                              />
+                            </div>,
+                            { autoClose: 10000 }
+                          );
+                        });
+                    } catch (err) {
+                      console.error('Error sharing codes:', err);
+                      toast.error('Error creating share link');
+                    }
                   }}
                   disabled={codes.filter(c => !c.used && !c.isUsed).length === 0}
                 >
@@ -613,7 +811,7 @@ const Admin = () => {
                 </button>
                 <button 
                   className="btn btn-danger" 
-                  onClick={deleteAllCodes}
+                  onClick={clearAllCodes}
                   disabled={loading || codes.length === 0}
                 >
                   <i className="fas fa-trash-alt me-2"></i>
@@ -674,7 +872,7 @@ const Admin = () => {
                             {code.used || code.isUsed ? 'Used' : 'Available'}
                           </span>
                         </td>
-                        <td>{code.createdAt ? new Date(code.createdAt).toLocaleString() : 'Invalid Date'}</td>
+                        <td>{code.generatedAt ? new Date(code.generatedAt).toLocaleString() : 'Invalid Date'}</td>
                         <td>
                           {code.usedAt ? new Date(code.usedAt).toLocaleString() : 'Not used yet'}
                         </td>

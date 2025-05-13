@@ -3,277 +3,476 @@ import { Link } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import api from '../api/axios';
-import { getLocalCodes, saveLocalCodes } from '../proxyService';
+import { 
+  getLocalCodes, 
+  saveLocalCodes, 
+  updateSyncTimestamp, 
+  markCodeAsUsedGlobally,
+  isCodeUsedGlobally,
+  setupBroadcastListener,
+  startPollingSync,
+  stopPollingSync,
+  getAllGloballyUsedCodes,
+  setupFirebaseSync
+} from '../proxyService';
+import FirebaseSync from '../firebaseConfig';
 
 const Public = () => {
-  const [code, setCode] = useState('');
-  const [message, setMessage] = useState('');
+  const [codeInput, setCodeInput] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [verified, setVerified] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [fadeIn, setFadeIn] = useState(false);
-  const [activeTeamMember, setActiveTeamMember] = useState(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [verificationLog, setVerificationLog] = useState([]);
+  // Add state for last refresh time
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  // Add state to track if real-time updates are working
+  const [realtimeStatus, setRealtimeStatus] = useState('initializing');
   
-  // Team members data
-  const teamMembers = [
-    { id: 1, name: "Jamespetter Lazaro", role: "Lead Developer", image: "/team/james.jpg", info: "James leads our development team with expertise in game programming and architecture." },
-    { id: 2, name: "Karl Santino Sacayan", role: "Art Director", image: "/team/karlpogi.jpg", info: "Karl oversees all visual elements in our games, specializing in pixel art and character design." },
-    { id: 3, name: "Kysha Gayle Toribio", role: "Sound Designer", image: "/team/kysha.jpg", info: "Kysha creates immersive soundscapes and music that bring our game worlds to life." },
-    { id: 4, name: "Emmanuel Jacob Montes", role: "Game Designer", image: "/team/ejay.jpg", info: "Emmanuel (Ejay) focuses on gameplay mechanics and player experience design." },
-    { id: 5, name: "Jaymar Abistado", role: "UI/UX Designer", image: "/team/jay.jpg", info: "Jaymar ensures our interfaces are both beautiful and intuitive for the best player experience." },
-    { id: 6, name: "Drix John Delos Reyes", role: "Producer", image: "/team/drix.jpg", info: "Drix manages project timelines and coordinates between all departments to deliver quality games." },
-    { id: 7, name: "Stefanie Zophia Choco", role: "Narrative Designer", image: "/team/phia.jpg", info: "Stefanie crafts compelling stories and characters that engage players in our game worlds." },
-    { id: 8, name: "Paul Rovic Angeles", role: "QA Lead", image: "/team/hookadoncic.jpg", info: "Paul ensures our games meet the highest quality standards before release through rigorous testing." },
-    { id: 9, name: "Nathan Villena", role: "Community Manager", image: "/team/thathan.jpg", info: "Nathan builds and nurtures our amazing player community, gathering feedback and organizing events." },
-    { id: 10, name: "John Lynard Cabading", role: "Marketing Director", image: "/team/polgorg.jpg", info: "John develops strategies to bring our games to wider audiences and create engaging campaigns." },
-    { id: 11, name: "Bernard James Raplisa", role: "Technical Artist", image: "/team/bernard.jpg", info: "Bernard bridges the gap between art and programming, optimizing visual assets and creating technical solutions for the art pipeline." }
-  ];
+  // Game URL - where to redirect after successful verification
+  const gameUrl = 'https://www.clyoth.top/'; // Unity WebGL game URL
   
-  // URL of your Unity WebGL game
-  const gameUrl = 'https://www.clyoth.top/';
+  // Toast styling
+  const successToastStyle = {
+    backgroundColor: '#28a745',
+    color: 'white'
+  };
+  
+  const errorToastStyle = {
+    backgroundColor: '#dc3545',
+    color: 'white'
+  };
 
   useEffect(() => {
     // Add fade-in animation when component mounts
     setFadeIn(true);
     // Clear any errors on initial load
     setError('');
-  }, []);
 
-  // Custom toast styles
-  const successToastStyle = {
-    background: 'linear-gradient(135deg, #2980b9 0%, #2ecc71 100%)',
-    borderRadius: '8px',
-    color: 'white',
-    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)'
-  };
-  
-  const errorToastStyle = {
-    background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
-    borderRadius: '8px',
-    color: 'white',
-    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)'
-  };
-
-  // Function to attempt code verification with maximum resilience
-  const verifyCodeWithRetry = async (code, retriesLeft = 3) => {
-    try {
-      // Send code to server for verification
-      console.log(`Attempting code verification (retries left: ${retriesLeft})`);
-      const response = await api.post('/codes/verify', { code });
-      console.log('Verification successful:', response.data);
-      return response;
-    } catch (err) {
-      console.error('Verification error:', err);
+    // Setup the broadcast channel listener for real-time updates
+    const broadcastListenerSet = setupBroadcastListener((message) => {
+      console.log('Broadcast message received in Public component:', message);
       
-      // If we have retries left and this is a network error, try again
-      if (retriesLeft > 0 && !err.response) {
-        // Longer delay between retries for mobile connections
-        const retryDelay = (4 - retriesLeft) * 1500; // 1.5s, 3s, 4.5s
-        console.log(`Network error. Retrying verification in ${retryDelay/1000}s... (${retriesLeft} retries left)`);
-        
-        // Show retry toast
-        toast.info(
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <i className="fas fa-sync-alt fa-spin me-2"></i>
-              <span>Retrying...</span>
-            </div>
-            <div style={{ fontSize: '0.8rem', marginTop: '5px' }}>
-              Network issues detected. Trying again...
-            </div>
-          </div>,
-          { 
+      // Handle different message types
+      switch (message.action) {
+        case 'CODE_USED_GLOBALLY':
+        case 'CODE_STATUS_CHANGED':
+          // Check if this affects the current input
+          if (codeInput && message.data.code === codeInput.trim().toUpperCase()) {
+            // Update the UI to show the code is already used
+            setError(`This code has been used on another device at ${new Date(message.data.usedAt).toLocaleString()}`);
+            
+            // Show a toast notification
+            toast.error(`The code you entered (${message.data.code}) was just used on another device!`, {
             position: 'top-center',
-            autoClose: retryDelay - 200,
-            hideProgressBar: false
+              autoClose: 5000
+            });
           }
-        );
+          break;
+        case 'SYNC_TIMESTAMP_UPDATED':
+          // Only show a discreet notification for background syncs
+          setLastRefresh(new Date());
+          break;
+        case 'CODES_UPDATED':
+          // Show notification for code database updates
+          toast.info(`Code database has been updated on another device.`, {
+            position: 'top-right',
+            autoClose: 3000
+          });
+          setLastRefresh(new Date());
+          break;
+        case 'FIREBASE_SYNC':
+          // Firebase sync updates
+          if (message.data.type === 'usage_update') {
+            toast.info('Received code usage update from another device', {
+              position: 'top-right',
+              autoClose: 3000
+            });
+          }
+          setLastRefresh(new Date());
+          setRealtimeStatus('connected');
+          break;
+        default:
+          // For any other updates, just refresh the timestamp
+          setLastRefresh(new Date());
+      }
+    });
+    
+    // Setup Firebase for cross-device sync
+    const initFirebase = async () => {
+      const firebaseInitialized = await setupFirebaseSync((message) => {
+        console.log('Firebase sync message in Public component:', message);
         
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-        return verifyCodeWithRetry(code, retriesLeft - 1);
+        // Set status to connected
+        setRealtimeStatus('connected');
+        
+        // Handle Firebase sync events
+        if (message.action === 'FIREBASE_SYNC') {
+          // Update local timestamp
+          setLastRefresh(new Date());
+          
+          // If current input matches a used code, update error state
+          if (codeInput) {
+            const isUsed = isCodeUsedGlobally(codeInput);
+            if (isUsed) {
+              setError(`This code has been used on another device`);
+            }
+          }
+        }
+      });
+      
+      setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
+    };
+    
+    // Initialize Firebase sync
+    initFirebase();
+    
+    // Start polling for sync across devices (every 2 seconds)
+    startPollingSync(() => {
+      console.log('Public component - polling refresh triggered');
+      setLastRefresh(new Date());
+    }, 2000);
+
+    // Cleanup function to remove listeners when component unmounts
+    return () => {
+      // Stop polling when component unmounts
+      stopPollingSync();
+    };
+  }, [codeInput]);
+
+  // Simple verification function focused on localStorage but also checking Firebase
+  const verifyCodeInLocalStorage = async (codeToVerify) => {
+    // First, normalize the code
+    const normalizedCode = codeToVerify.toString().trim().toUpperCase();
+    console.log(`Checking code "${normalizedCode}"`);
+    
+    try {
+      // Try to check Firebase directly first for the most reliable status
+      console.log('Checking Firebase for the most up-to-date status...');
+      const isUsedInFirebase = await checkCodeInFirebase(normalizedCode);
+      
+      if (isUsedInFirebase) {
+        console.log(`Code ${normalizedCode} is marked as used in Firebase`);
+        // Update local storage to match Firebase status for future reference
+        try {
+          const allCodes = getLocalCodes();
+          const codeToUpdate = allCodes.find(c => c.code.toUpperCase().trim() === normalizedCode);
+          if (codeToUpdate && !codeToUpdate.used) {
+            codeToUpdate.used = true;
+            codeToUpdate.usedAt = isUsedInFirebase.usedAt || new Date().toISOString();
+            saveLocalCodes(allCodes);
+            console.log('Updated local code to match Firebase status');
+          }
+        } catch (localUpdateErr) {
+          console.error('Error updating local code status:', localUpdateErr);
+        }
+        
+        return { 
+          success: false, 
+          reason: 'already-used-globally',
+          usedAt: isUsedInFirebase.usedAt || new Date().toISOString()
+        };
       }
       
-      // If all retries failed, throw the error
-      throw err;
+      // Continue with local checks if not used in Firebase
+      // Get all codes from localStorage
+      const allCodes = getLocalCodes();
+      console.log(`Checking code "${normalizedCode}" against ${allCodes.length} codes in localStorage`);
+      
+      if (!allCodes || allCodes.length === 0) {
+        return { success: false, reason: 'no-codes' };
+      }
+      
+      // Local check for global usage (backup check)
+      if (isCodeUsedGlobally(normalizedCode)) {
+        console.log(`Code ${normalizedCode} is already used globally (localStorage)`);
+        
+        // Get the usage details for better user feedback
+        const globalUsageData = getAllGloballyUsedCodes();
+        let usedAtTime = null;
+        
+        if (globalUsageData && globalUsageData[normalizedCode]) {
+          usedAtTime = globalUsageData[normalizedCode].usedAt;
+        }
+        
+        return { 
+          success: false, 
+          reason: 'already-used-globally',
+          usedAt: usedAtTime
+        };
+      }
+      
+      // Look for the matching code (case insensitive)
+      const matchingCode = allCodes.find(c => 
+        c.code.toUpperCase().trim() === normalizedCode && 
+        !c.used
+      );
+              
+      // Check if the code exists but has been used
+      const usedMatchingCode = allCodes.find(c => 
+        c.code.toUpperCase().trim() === normalizedCode && 
+        c.used
+      );
+              
+      if (matchingCode) {
+        console.log('Found valid unused code - marking as used:', matchingCode.code);
+        
+        // Mark the code as used
+        matchingCode.used = true;
+        matchingCode.usedAt = new Date().toISOString();
+        
+        try {
+          // Save back to localStorage immediately
+          localStorage.setItem('mockDb_codes', JSON.stringify(allCodes));
+          console.log('Successfully updated localStorage with used code status');
+          
+          // Double-check: Also use the saveLocalCodes utility function as a backup
+          saveLocalCodes(allCodes);
+          
+          // CRITICAL: Update the sync timestamp to trigger updates on other devices
+          updateSyncTimestamp();
+          console.log('Updated sync timestamp to trigger refresh on other devices');
+          
+          // CRITICAL: Mark the code as used globally
+          markCodeAsUsedGlobally(matchingCode.code);
+          console.log('Marked code as used globally for cross-device sync');
+          
+          // Update status display
+          setRealtimeStatus('connected');
+          
+          // Force immediate Firebase sync
+          try {
+            await import('../firebaseConfig').then(module => {
+              if (module && module.syncCodesNow) {
+                console.log('Triggering immediate Firebase sync');
+                module.syncCodesNow();
+              }
+            });
+          } catch (syncErr) {
+            console.error('Error during immediate Firebase sync:', syncErr);
+          }
+        } catch (err) {
+          console.error('Error saving code status to localStorage:', err);
+        }
+        
+        return { success: true, code: matchingCode };
+      } else if (usedMatchingCode) {
+        return { success: false, reason: 'already-used', code: usedMatchingCode };
+      } else {
+        return { success: false, reason: 'invalid-code' };
+      }
+    } catch (err) {
+      console.error('Error in verification process:', err);
+      return { success: false, reason: 'verification-error', error: err.message };
     }
   };
+
+  // Function to check Firebase directly for the most up-to-date status
+  const checkCodeInFirebase = async (code) => {
+    try {
+      // Normalize code to ensure consistency
+      const normalizedCode = code.toString().trim().toUpperCase();
+      
+      // Import Firebase functions
+      const { initializeApp } = await import('firebase/app');
+      const { getDatabase, ref, get, child } = await import('firebase/database');
+      
+      // Firebase configuration (same as in other files)
+      const firebaseConfig = {
+        apiKey: "AIzaSyDltP_6QMX-9h5X7Z8Q7xSW1X5M4iV8sHo",
+        authDomain: "codesync-demo.firebaseapp.com",
+        projectId: "codesync-demo",
+        storageBucket: "codesync-demo.appspot.com",
+        messagingSenderId: "432019689101",
+        appId: "1:432019689101:web:7d8cfe0c1a77d15b4c6f83",
+        databaseURL: "https://codesync-demo-default-rtdb.firebaseio.com"
+      };
+      
+      // Initialize Firebase if needed
+      let app;
+      try {
+        app = initializeApp(firebaseConfig);
+      } catch (err) {
+        // Already initialized, ignore
+        console.log('Firebase already initialized in checkCodeInFirebase');
+      }
+      
+      // Get database reference
+      const database = getDatabase();
+      const dbRef = ref(database);
+      
+      // First check Firebase for the code in master_usage
+      console.log(`Checking code ${normalizedCode} directly in Firebase master_usage`);
+      
+      // Add a timeout to prevent hanging indefinitely if Firebase is slow to respond
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Firebase check timed out')), 3000)
+      );
+      
+      const fetchPromise = get(child(dbRef, `master_usage/${normalizedCode}`));
+      
+      // Race between the fetch and the timeout
+      const snapshot = await Promise.race([fetchPromise, timeoutPromise])
+        .catch(err => {
+          console.error('Firebase check failed or timed out:', err);
+          return null;  // Return null instead of throwing, to continue with local check
+        });
+      
+      if (snapshot && snapshot.exists()) {
+        const data = snapshot.val();
+        console.log(`Firebase check result for ${normalizedCode}:`, data);
+        
+        // If used, return the usage data
+        if (data && data.used === true) {
+          return data;
+        }
+      } else if (snapshot) { // snapshot exists but data doesn't
+        console.log(`Code ${normalizedCode} not found in Firebase master_usage`);
+      }
+      
+      // Also check in the codes collection as fallback
+      try {
+        const codesSnapshot = await get(child(dbRef, 'codes/codes'))
+          .catch(err => {
+            console.warn('Fallback Firebase codes check failed:', err);
+            return null;
+          });
+          
+        if (codesSnapshot && codesSnapshot.exists()) {
+          const codesData = codesSnapshot.val();
+          
+          if (Array.isArray(codesData)) {
+            const matchingCode = codesData.find(c => 
+              c && c.code && c.code.toString().trim().toUpperCase() === normalizedCode && c.used
+            );
+            
+            if (matchingCode) {
+              console.log(`Code ${normalizedCode} found as used in Firebase codes collection`);
+              return { used: true, usedAt: matchingCode.usedAt || new Date().toISOString() };
+            }
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn('Error in fallback Firebase check:', fallbackErr);
+      }
+      
+      // Not used or not found
+      return null;
+    } catch (err) {
+      console.error('Error checking Firebase for code:', err);
+      // Return null instead of throwing to allow fallback to local storage
+      return null;
+    }
+  };
+
+  // Redirect to game after successful verification
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        window.location.href = gameUrl;
+      }, 3000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [success, gameUrl]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    
+    // Reset states
+    setVerifying(true);
     setError('');
-    setVerified(false);
-
-    // Validate code format
-    if (!code || code.trim() === '') {
-      setError('Please enter a valid access code');
-      setLoading(false);
-      return;
-    }
-
-    // IMPORTANT: We need to normalize the code input for consistent comparison
-    const codeToVerify = code.trim().toUpperCase(); // Standardize code format
-    console.log('Verifying code (after uppercase):', codeToVerify);
+    setSuccess(false);
+    
+    // Get the trimmed code
+    const codeToVerify = codeInput.trim();
+    
+    // Add to verification log
+    const timestamp = new Date();
+    setVerificationLog(prev => [
+      {
+        id: prev.length + 1,
+        code: codeToVerify,
+        timestamp: timestamp.toISOString(),
+        result: 'pending'
+      },
+      ...prev
+    ]);
     
     try {
-      // Direct localStorage verification - most reliable approach 
-      console.log('Starting direct localStorage verification');
-      console.log('Code to verify:', codeToVerify);
-      
-      // Get all codes directly from localStorage
-      const allCodes = getLocalCodes();
-      console.log('Total codes found in localStorage:', allCodes.length);
-      
-      if (Array.isArray(allCodes) && allCodes.length > 0) {
-        // Log a few sample codes for debugging
-        console.log('First few codes in storage:');
-        allCodes.slice(0, 3).forEach((c, i) => {
-          console.log(`Sample code ${i}:`, c.code, 'Used:', c.used || false);
-        });
-        
-        // CRITICAL FIX: Explicitly normalize both sides of the comparison
-        // This ensures consistent case handling across devices
-        const matchingCode = allCodes.find(c => 
-          c.code.toUpperCase().trim() === codeToVerify.toUpperCase().trim() && 
-          !c.used
-        );
-        
-        console.log('Found matching code?', !!matchingCode);
-        
-        if (matchingCode) {
-          console.log('MATCH FOUND!', matchingCode);
-          
-          // Mark as used
-          matchingCode.used = true;
-          matchingCode.usedAt = new Date().toISOString();
-          
-          // Save back to localStorage
-          saveLocalCodes(allCodes);
-          
-          // Success!
-          setMessage('Access code verified successfully! Redirecting to game...');
-          setVerified(true);
-          
-          toast.success(
-            <div>
-              <i className="fas fa-check-circle me-2"></i> Code verified successfully!
-            </div>,
-            { 
-              position: 'top-center',
-              autoClose: 2000,
-              hideProgressBar: false,
-              closeOnClick: true,
-              pauseOnHover: true,
-              draggable: true,
-              progress: undefined,
-              style: successToastStyle
-            }
-          );
-          
-          // Redirect to game after delay
-          setTimeout(() => {
-            window.location.href = gameUrl;
-          }, 2000);
-          
-          setLoading(false);
-          return;
-        }
-        
-        // Check for already used code
-        const usedMatchingCode = allCodes.find(c => 
-          c.code.toUpperCase().trim() === codeToVerify.toUpperCase().trim() && 
-          c.used
-        );
-        
-        if (usedMatchingCode) {
-          console.log('CODE FOUND BUT USED:', usedMatchingCode);
-          setError('This code has already been used.');
-          
-          toast.error(
-            <div>
-              <i className="fas fa-exclamation-triangle me-2"></i> Code already used!
-            </div>,
-            { 
-              position: 'top-center',
-              autoClose: 3000,
-              hideProgressBar: false,
-              style: errorToastStyle
-            }
-          );
-          
-          setLoading(false);
-          return;
-        }
-        
-        // If not found at all, try looking for partial matches for better error messages
-        const allStoredCodeValues = allCodes.map(c => c.code.toUpperCase().trim());
-        
-        // Try to look for similar codes for better error messages
-        // Only consider the code similar if it's at least 3 characters long
-        if (codeToVerify.length >= 3) {
-          const similarCodes = allStoredCodeValues.filter(c => 
-            c.includes(codeToVerify) || codeToVerify.includes(c)
-          );
-          
-          if (similarCodes.length > 0) {
-            console.log('Similar codes found:', similarCodes);
-            setError(`Invalid code. Did you mean ${similarCodes[0]}?`);
-            
-            setLoading(false);
-            toast.error(
-              <div>
-                <i className="fas fa-exclamation-triangle me-2"></i> Invalid code
-              </div>,
-              { 
-                position: 'top-center',
-                autoClose: 3000,
-                hideProgressBar: false,
-                style: errorToastStyle
-              }
-            );
-            return;
-          }
-        }
-        
-        // No matches found at all
-        setError('Invalid code. Please check and try again.');
-      } else {
-        console.log('No codes found in localStorage or invalid format');
-        setError('No valid codes found in the system. Please generate codes in admin panel first.');
+      // Validate input
+      if (!codeToVerify) {
+        throw new Error('Please enter a code');
       }
       
-      // If we get here, the code verification failed
-      toast.error(
-        <div>
-          <i className="fas fa-exclamation-triangle me-2"></i> Invalid code
-        </div>,
-        { 
-          position: 'top-center',
-          autoClose: 3000,
-          hideProgressBar: false,
-          style: errorToastStyle
-        }
-      );
+      console.log('Verifying code:', codeToVerify);
       
+      // Use our enhanced verification function that checks Firebase
+      const result = await verifyCodeInLocalStorage(codeToVerify);
+      
+      if (result.success) {
+        // Code is valid and has been marked as used
+        console.log('Code verified successfully:', result.code);
+        setVerificationLog(prev => 
+          prev.map(log => 
+            log.code === codeToVerify 
+              ? { ...log, result: 'success', method: 'verification' } 
+              : log
+          )
+        );
+        setSuccess(true);
+        setShowConfetti(true);
+        
+        // Show success toast
+        toast.success(`Code "${codeToVerify}" verified successfully! Redirecting to game...`, {
+          position: 'top-center',
+          autoClose: 3000
+        });
+      } else {
+        // Code verification failed
+        console.log('Code verification failed:', result.reason);
+        
+        let errorMessage;
+        switch (result.reason) {
+          case 'already-used':
+            errorMessage = `This code has already been used${result.code?.usedAt ? ` at ${new Date(result.code.usedAt).toLocaleString()}` : ''}`;
+            break;
+          case 'already-used-globally':
+            errorMessage = `This code has already been used${result.usedAt ? ` at ${new Date(result.usedAt).toLocaleString()}` : ''}`;
+            break;
+          case 'no-codes':
+            errorMessage = 'No codes found in the system. Please contact support.';
+            break;
+          case 'verification-error':
+            errorMessage = `Error during verification: ${result.error || 'Unknown error'}`;
+            break;
+          case 'invalid-code':
+          default:
+            errorMessage = 'Invalid code. Please check and try again.';
+        }
+        
+        setVerificationLog(prev => 
+          prev.map(log => 
+            log.code === codeToVerify 
+              ? { ...log, result: 'error', reason: result.reason } 
+            : log
+          )
+        );
+        throw new Error(errorMessage);
+      }
     } catch (err) {
-      console.error('Error during verification:', err);
-      setError('System error during verification. Please try again.');
+      console.error('Verification error:', err);
+      setError(err.message || 'An error occurred while verifying your code');
       
-      toast.error(
-        <div>
-          <i className="fas fa-exclamation-triangle me-2"></i> Verification error
-        </div>,
-        { 
-          position: 'top-center',
-          autoClose: 3000,
-          hideProgressBar: false,
-          style: errorToastStyle
-        }
-      );
+      // Show error toast
+      toast.error(err.message || 'Verification failed', {
+        position: 'top-center',
+        autoClose: 5000
+      });
+    } finally {
+      setVerifying(false);
     }
-    
-    setLoading(false);
   };
 
   return (
@@ -302,85 +501,71 @@ const Public = () => {
         minHeight: '100vh'
       }}>
         {/* Navigation Bar with animation */}
-        <nav className="navbar navbar-expand-lg navbar-dark" style={{
-          background: 'rgba(0, 12, 36, 0.85)',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-          animation: 'fadeIn 0.5s ease-in-out',
+        <header style={{
+          backgroundColor: 'rgba(1, 22, 57, 0.9)',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
           padding: '15px 0',
           position: 'relative',
-          zIndex: 2
+          zIndex: 10
         }}>
           <div className="container d-flex justify-content-between align-items-center">
-            <Link to="/" className="navbar-brand d-flex align-items-center">
-              <div style={{ 
+            <Link to="/" className="d-flex align-items-center text-decoration-none">
+              <img 
+                src="/company_logo.jpg" 
+                alt="End of The Road" 
+                style={{ 
                 width: '40px',
                 height: '40px',
-                marginRight: '12px',
                 borderRadius: '50%',
-                overflow: 'hidden',
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
-                border: '2px solid rgba(255, 255, 255, 0.3)',
-                flexShrink: 0
-              }}>
-                <img 
-                  src="/company_logo.jpg" 
-                  alt="Company Logo" 
-                  style={{ 
-                    width: '100%', 
-                    height: '100%',
-                    objectFit: 'cover'
+                  marginRight: '10px',
+                  border: '2px solid rgba(255, 255, 255, 0.2)'
                   }}
                 />
-              </div>
               <span style={{ 
-                fontWeight: '700', 
-                letterSpacing: '1px',
-                fontSize: 'clamp(1.2rem, 4vw, 1.5rem)',
-                color: 'white'
-              }}>End of The Road</span>
+                color: 'white', 
+                fontSize: '1.4rem', 
+                fontWeight: '600',
+                letterSpacing: '0.5px'
+              }}>
+                End of The Road
+              </span>
             </Link>
             
             <div className="d-flex">
               <Link 
                 to="/" 
-                className="btn me-3"
-                style={{
-                  background: 'transparent',
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: '500',
-                  letterSpacing: '0.5px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '8px 15px',
-                  borderRadius: '4px'
-                }}
+                className="text-white text-decoration-none d-flex align-items-center me-3"
+                style={{ fontSize: '1rem' }}
               >
                 <i className="fas fa-gamepad me-2"></i>
-                Public Portal
+                <span className="d-none d-sm-inline">Public Portal</span>
               </Link>
               
               <Link 
                 to="/login" 
-                className="btn"
+                className="text-white text-decoration-none d-flex align-items-center me-3"
+                style={{ fontSize: '1rem' }}
+              >
+                <i className="fas fa-lock me-2"></i>
+                <span className="d-none d-sm-inline">Admin Portal</span>
+              </Link>
+              
+              <Link 
+                to="/debug" 
+                className="text-white text-decoration-none d-flex align-items-center"
                 style={{
-                  background: 'transparent',
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: '500',
-                  letterSpacing: '0.5px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '8px 15px',
+                  fontSize: '1rem',
+                  backgroundColor: 'rgba(255, 69, 69, 0.2)',
+                  padding: '5px 10px',
                   borderRadius: '4px'
                 }}
               >
-                <i className="fas fa-lock me-2"></i>
-                Admin Portal
+                <i className="fas fa-bug me-2"></i>
+                <span className="d-none d-sm-inline">Debug</span>
               </Link>
             </div>
           </div>
-        </nav>
+        </header>
         
         <div className={`container mt-4 mt-md-5 px-3 px-sm-auto ${fadeIn ? 'fadeIn' : ''}`} style={{ 
           animation: 'fadeIn 1s ease-in-out',
@@ -429,13 +614,35 @@ const Public = () => {
                         border: '3px solid #3a7bd5'
                       }}
                     />
-                    <h3 className="card-title text-center" style={{ fontSize: 'clamp(1.25rem, 4vw, 1.75rem)' }}>Enter Your Code</h3>
+                    <h1 className="text-center mb-4" style={{ fontSize: 'clamp(1.5rem, 4vw, 2.5rem)' }}>
+                      <i className="fas fa-unlock-alt me-2"></i>
+                      Enter Access Code
+                    </h1>
                     <p className="text-muted">Please enter your access code to play the game</p>
+                    
+                    {/* Add status indicator for real-time updates */}
+                    <div className="d-flex justify-content-center align-items-center mb-2">
+                      <span className="badge bg-secondary me-2 d-flex align-items-center">
+                        <div style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          marginRight: '5px',
+                          backgroundColor: realtimeStatus === 'connected' ? '#28a745' : 
+                                           realtimeStatus === 'limited' ? '#ffc107' : '#dc3545'
+                        }}></div>
+                        Real-time updates {realtimeStatus === 'connected' ? 'active' : 
+                                         realtimeStatus === 'limited' ? 'limited' : 'inactive'}
+                      </span>
+                      <small className="text-muted">
+                        Last refreshed: {lastRefresh.toLocaleTimeString()}
+                      </small>
+                    </div>
                   </div>
                   
-                  {message && <div className="alert alert-success">{message}</div>}
+                  {error && <div className="alert alert-danger">{error}</div>}
                   
-                  {verified ? (
+                  {success ? (
                     <div className="text-center verification-success">
                       <div className="checkmark-circle mb-4">
                         <i className="fas fa-check-circle" style={{ fontSize: 'clamp(3rem, 10vw, 5rem)', color: '#5cb85c' }}></i>
@@ -464,14 +671,14 @@ const Public = () => {
                             type="text"
                             className="form-control"
                             id="code"
-                            value={code}
+                            value={codeInput}
                             onChange={(e) => {
-                              setCode(e.target.value.toUpperCase());
+                              setCodeInput(e.target.value.toUpperCase());
                               setError(''); // Clear error when user starts typing
                             }}
                             placeholder="Enter your code"
                             required
-                            disabled={loading}
+                            disabled={verifying}
                             style={{ 
                               fontSize: 'clamp(1rem, 3vw, 1.2rem)',
                               letterSpacing: '2px',
@@ -488,7 +695,7 @@ const Public = () => {
                       <button 
                         type="submit" 
                         className="btn btn-primary w-100 py-3" // Taller button for better touch targets
-                        disabled={loading}
+                        disabled={verifying}
                         style={{
                           background: 'linear-gradient(135deg, #2980b9 0%, #2ecc71 100%)',
                           border: 'none',
@@ -496,7 +703,7 @@ const Public = () => {
                           fontSize: 'clamp(0.9rem, 3vw, 1rem)'
                         }}
                       >
-                        {loading ? (
+                        {verifying ? (
                           <>
                             <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                             Verifying...
@@ -529,59 +736,6 @@ const Public = () => {
           animation: 'fadeIn 0.5s ease-in-out'
         }}>
           <div className="container">
-            {/* Team Members Section */}
-            <div className="team-section mb-4">
-              <h5 className="text-center text-white mb-3" style={{
-                fontSize: 'clamp(1rem, 3vw, 1.2rem)',
-                fontWeight: '600',
-                letterSpacing: '1px'
-              }}>
-                <i className="fas fa-users me-2"></i>
-                Our Team
-              </h5>
-              <div className="d-flex justify-content-center flex-wrap" style={{ gap: '15px' }}>
-                {teamMembers.map((member) => (
-                  <div 
-                    key={member.id}
-                    className="team-member" 
-                    onClick={() => setActiveTeamMember(member)}
-                    style={{
-                      width: '50px',
-                      height: '50px',
-                      borderRadius: '50%',
-                      overflow: 'hidden',
-                      cursor: 'pointer',
-                      border: '2px solid rgba(255, 255, 255, 0.3)',
-                      transition: 'transform 0.3s, border 0.3s',
-                      animation: 'pulse 3s infinite',
-                      animationDelay: `${member.id * 0.2}s`
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'scale(1.15)';
-                      e.currentTarget.style.border = '2px solid rgba(255, 255, 255, 0.8)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'scale(1)';
-                      e.currentTarget.style.border = '2px solid rgba(255, 255, 255, 0.3)';
-                    }}
-                  >
-                    <img 
-                      src={member.image} 
-                      alt={member.name}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover'
-                      }}
-                      onError={(e) => {
-                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=random&color=fff&size=50`;
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-            
             <div className="d-flex flex-column flex-md-row justify-content-center align-items-center">
               <div className="text-white text-center mb-2 mb-md-0 me-md-4" style={{
                 fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)',
@@ -619,189 +773,6 @@ const Public = () => {
           </div>
         </footer>
         
-        {/* Team Member Popup Modal */}
-        {activeTeamMember && (
-          <div 
-            className="team-member-modal" 
-            onClick={() => setActiveTeamMember(null)}
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              zIndex: 1050,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              animation: 'fadeIn 0.3s'
-            }}
-          >
-            <div 
-              className="modal-content"
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(10px)',
-                borderRadius: '12px',
-                padding: '25px',
-                maxWidth: '350px',
-                width: '90%',
-                boxShadow: '0 15px 35px rgba(0, 0, 0, 0.3)',
-                animation: 'slideUp 0.4s',
-                position: 'relative',
-                overflow: 'hidden'
-              }}
-            >
-              <div 
-                className="close-button" 
-                onClick={() => setActiveTeamMember(null)}
-                style={{
-                  position: 'absolute',
-                  top: '10px',
-                  right: '10px',
-                  cursor: 'pointer',
-                  fontSize: '1.5rem',
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(0, 0, 0, 0.1)',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.1)';
-                }}
-              >
-                <i className="fas fa-times"></i>
-              </div>
-              
-              <div className="text-center" style={{ marginBottom: '20px' }}>
-                <div style={{
-                  width: '120px',
-                  height: '120px',
-                  borderRadius: '50%',
-                  margin: '0 auto 20px',
-                  border: '3px solid #3a7bd5',
-                  overflow: 'hidden',
-                  animation: 'pulse 2s infinite'
-                }}>
-                  <img 
-                    src={activeTeamMember.image} 
-                    alt={activeTeamMember.name}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover'
-                    }}
-                    onError={(e) => {
-                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(activeTeamMember.name)}&background=random&color=fff&size=120`;
-                    }}
-                  />
-                </div>
-                <h3 style={{ 
-                  fontSize: '1.4rem', 
-                  fontWeight: '600',
-                  color: '#333',
-                  marginBottom: '5px'
-                }}>
-                  {activeTeamMember.name}
-                </h3>
-                <div style={{
-                  display: 'inline-block',
-                  padding: '4px 15px',
-                  backgroundColor: 'rgba(58, 123, 213, 0.1)',
-                  borderRadius: '20px',
-                  color: '#3a7bd5',
-                  fontWeight: '600',
-                  fontSize: '0.9rem',
-                  marginBottom: '15px'
-                }}>
-                  {activeTeamMember.role}
-                </div>
-              </div>
-              
-              <p style={{
-                lineHeight: '1.6',
-                color: '#555',
-                textAlign: 'center',
-                padding: '0 10px'
-              }}>
-                {activeTeamMember.info}
-              </p>
-              
-              <div className="social-links d-flex justify-content-center mt-3" style={{ gap: '15px' }}>
-                <a href="#" className="social-link" style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  backgroundColor: '#3a7bd5',
-                  color: 'white',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  transition: 'transform 0.2s',
-                  boxShadow: '0 3px 10px rgba(58, 123, 213, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-3px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}>
-                  <i className="fab fa-linkedin-in"></i>
-                </a>
-                <a href="#" className="social-link" style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  backgroundColor: '#3a7bd5',
-                  color: 'white',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  transition: 'transform 0.2s',
-                  boxShadow: '0 3px 10px rgba(58, 123, 213, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-3px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}>
-                  <i className="fab fa-twitter"></i>
-                </a>
-                <a href="#" className="social-link" style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  backgroundColor: '#3a7bd5',
-                  color: 'white',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  transition: 'transform 0.2s',
-                  boxShadow: '0 3px 10px rgba(58, 123, 213, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-3px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}>
-                  <i className="fas fa-envelope"></i>
-                </a>
-              </div>
-            </div>
-          </div>
-        )}
-        
         {/* CSS Animations */}
         <style jsx="true">{`
           @keyframes pulse {
@@ -813,11 +784,6 @@ const Public = () => {
           @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
-          }
-          
-          @keyframes slideUp {
-            from { transform: translateY(30px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
           }
         `}</style>
       </div>
