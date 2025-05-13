@@ -12,10 +12,8 @@ import {
   setupBroadcastListener,
   startPollingSync,
   stopPollingSync,
-  updateSyncTimestamp,
-  setupFirebaseSync
+  updateSyncTimestamp
 } from '../proxyService';
-import FirebaseSync from '../firebaseConfig';
 
 const Admin = () => {
   const [codes, setCodes] = useState([]);
@@ -38,9 +36,6 @@ const Admin = () => {
   
   // Add state for real-time update status
   const [realtimeStatus, setRealtimeStatus] = useState('initializing');
-  
-  // Add state for Firebase connection status
-  const [firebaseConnected, setFirebaseConnected] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -112,15 +107,6 @@ const Admin = () => {
           }
           fetchCodes(false);
           break;
-        case 'FIREBASE_SYNC':
-          // Firebase sync updates
-          toast.info(`Firebase sync: ${message.data.type}`, {
-            position: 'top-right',
-            autoClose: 2000
-          });
-          fetchCodes(false);
-          setFirebaseConnected(true);
-          break;
         default:
           // For any other updates, check if sync is needed
           if (isSyncNeeded(lastSyncCheck)) {
@@ -131,44 +117,8 @@ const Admin = () => {
       }
     });
     
-    // Setup Firebase for cross-device sync - AUTO ENABLE per config
-    const initFirebase = async () => {
-      // Always initialize Firebase automatically
-      console.log('Auto-enabling Firebase sync...');
-      
-      const firebaseInitialized = await setupFirebaseSync((message) => {
-        console.log('Firebase sync message in Admin component:', message);
-        
-        // Set firebase connection status
-        setFirebaseConnected(true);
-        
-        // Handle Firebase sync events
-        if (message.action === 'FIREBASE_SYNC') {
-          // Update UI
-          setSyncStatus('Firebase sync active');
-          // Refresh codes list
-          fetchCodes(false);
-          // Update last sync check
-          setLastSyncCheck(getSyncTimestamp());
-          
-          // Show toast notification
-          toast.info(`Cross-device sync: ${message.data.type}`, {
-            position: 'top-right',
-            autoClose: 2000
-          });
-        }
-      });
-      
-      if (firebaseInitialized) {
-        setFirebaseConnected(true);
-        setSyncStatus('Firebase sync active');
-      }
-      
-      setRealtimeStatus(firebaseInitialized ? 'connected' : broadcastListenerSet ? 'limited' : 'offline');
-    };
-    
-    // Initialize Firebase sync
-    initFirebase();
+    // Set realtime status based on broadcast channel availability
+    setRealtimeStatus(broadcastListenerSet ? 'connected' : 'offline');
     
     // Start polling for sync across devices (every 1 second for more real-time updates)
     startPollingSync(() => {
@@ -411,23 +361,6 @@ const Admin = () => {
     
     // Update sync status
     setSyncStatus('Syncing...');
-    
-    // Sync to Firebase if connected
-    if (firebaseConnected) {
-      import('../firebaseConfig').then(module => {
-        if (module && module.syncCodesNow) {
-          console.log('Triggering immediate Firebase sync');
-          module.syncCodesNow();
-        }
-      }).catch(err => {
-        console.error('Error during Firebase sync:', err);
-      });
-    }
-    
-    // Clear sync status after 2 seconds
-    setTimeout(() => {
-      setSyncStatus(firebaseConnected ? 'Firebase sync active' : '');
-    }, 2000);
   };
 
   return (
@@ -574,16 +507,16 @@ const Admin = () => {
               <div className="alert alert-info">
                 <i className="fas fa-info-circle me-2"></i>
                 <strong>Info:</strong> Codes are automatically synchronized across all your devices.
-                {firebaseConnected && (
+                {realtimeStatus === 'connected' && (
                   <span className="ms-2 badge bg-success">
                     <i className="fas fa-cloud-upload-alt me-1"></i>
-                    Firebase Sync Active
+                    Realtime Sync Active
                   </span>
                 )}
-                {!firebaseConnected && (
+                {realtimeStatus === 'offline' && (
                   <span className="ms-2 badge bg-warning text-dark">
                     <i className="fas fa-exclamation-triangle me-1"></i>
-                    Local Sync Only
+                    Offline
                   </span>
                 )}
               </div>

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clear All Codes</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    
+    .card {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    
+    button {
+      background-color: #d9534f;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+    
+    button:hover {
+      background-color: #c9302c;
+    }
+    
+    #log {
+      background-color: #f8f9fa;
+      border: 1px solid #eaeaea;
+      border-radius: 4px;
+      padding: 15px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: monospace;
+      margin-top: 20px;
+    }
+    
+    .success {
+      color: green;
+      font-weight: bold;
+    }
+    
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Clear All Codes</h1>
+    <p><strong>Warning:</strong> This will permanently delete all access codes from the system. This action cannot be undone!</p>
+    
+    <p>Current codes in system:</p>
+    <div id="codeCount"></div>
+    
+    <button id="clearCodesBtn">Delete All Codes</button>
+    
+    <div id="log"></div>
+  </div>
+  
+  <script>
+    // Function to update code count
+    function updateCodeCount() {
+      const logEl = document.getElementById('log');
+      const countEl = document.getElementById('codeCount');
+      
+      try {
+        const codesJson = localStorage.getItem('mockDb_codes');
+        const codes = codesJson ? JSON.parse(codesJson) : [];
+        
+        countEl.innerHTML = `<strong>${codes.length}</strong> codes found in the system`;
+        
+        if (codes.length > 0) {
+          // Show breakdown
+          countEl.innerHTML += `<br>- ${codes.filter(c => !c.used).length} available codes`;
+          countEl.innerHTML += `<br>- ${codes.filter(c => c.used).length} used codes`;
+        }
+      } catch (err) {
+        logEl.innerHTML += `<div class="error">Error reading codes: ${err.message}</div>`;
+        countEl.innerHTML = 'Error counting codes';
+      }
+    }
+    
+    // Update count on load
+    updateCodeCount();
+    
+    // Handle clear codes button
+    document.getElementById('clearCodesBtn').addEventListener('click', function() {
+      if (confirm('Are you absolutely sure you want to delete ALL access codes from the system? This cannot be undone!')) {
+        const logEl = document.getElementById('log');
+        
+        try {
+          // Clear codes
+          localStorage.setItem('mockDb_codes', JSON.stringify([]));
+          logEl.innerHTML += '<div>All codes have been deleted from localStorage</div>';
+          
+          // Update sync timestamp
+          const syncTimestamp = new Date().toISOString();
+          localStorage.setItem('code_sync_timestamp', syncTimestamp);
+          logEl.innerHTML += `<div>Updated sync timestamp: ${syncTimestamp}</div>`;
+          
+          // Clear global usage data
+          localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
+          logEl.innerHTML += '<div>Cleared global code usage data</div>';
+          
+          // Try to broadcast the update
+          try {
+            const broadcastChannel = new BroadcastChannel('codes_sync_channel');
+            broadcastChannel.postMessage({
+              action: 'CODES_UPDATED',
+              data: { count: 0 },
+              timestamp: new Date().toISOString()
+            });
+            logEl.innerHTML += '<div>Broadcast sent to other tabs about code deletion</div>';
+          } catch (err) {
+            logEl.innerHTML += `<div class="error">Could not broadcast update: ${err.message}</div>`;
+          }
+          
+          logEl.innerHTML += '<div class="success">OPERATION COMPLETE: All codes have been deleted from the system</div>';
+          
+          // Update the count display
+          updateCodeCount();
+        } catch (err) {
+          logEl.innerHTML += `<div class="error">Error: ${err.message}</div>`;
+        }
+      }
+    });
+  </script>
+</body>
+</html> 
