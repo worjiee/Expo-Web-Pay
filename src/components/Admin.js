@@ -340,18 +340,24 @@ const Admin = () => {
         // Clear codes directly from localStorage
         localStorage.setItem('mockDb_codes', JSON.stringify([]));
         
-        // Add a permanent deletion flag to prevent code reinitialization
+        // Add a flag to prevent automatic code initialization but allow manual additions
         localStorage.setItem('codes_force_empty', 'true');
         localStorage.removeItem('app_initialized');
         
         // Clear any globally used codes
         localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
         
+        // Set a temporary flag to allow saving empty codes array
+        localStorage.setItem('user_initiated_save', 'true');
+        
         // Refresh codes list
         fetchCodes();
         
+        // Remove the temporary flag
+        setTimeout(() => localStorage.removeItem('user_initiated_save'), 100);
+        
         // Show success message
-        toast.success('All codes have been permanently deleted', {
+        toast.success('All codes have been deleted. You can still add new codes manually.', {
           position: 'top-right',
           autoClose: 3000
         });
@@ -413,9 +419,10 @@ const Admin = () => {
     try {
       // Remove the force empty flag
       localStorage.removeItem('codes_force_empty');
+      localStorage.setItem('app_initialized', 'true');
       
       // Show success message
-      toast.success('Code generation has been re-enabled', {
+      toast.success('Automatic code initialization re-enabled. The system may add default codes on next startup.', {
         position: 'top-right',
         autoClose: 3000
       });
@@ -792,7 +799,7 @@ const Admin = () => {
                     onClick={enableCodeGeneration}
                   >
                     <i className="fas fa-unlock me-2"></i>
-                    Enable Code Generation
+                    Allow Default Codes
                   </button>
                 ) : (
                   <button 
