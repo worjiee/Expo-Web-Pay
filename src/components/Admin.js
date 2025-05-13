@@ -340,21 +340,28 @@ const Admin = () => {
         // Clear codes directly from localStorage
         localStorage.setItem('mockDb_codes', JSON.stringify([]));
         
+        // Add a permanent deletion flag to prevent code reinitialization
+        localStorage.setItem('codes_force_empty', 'true');
+        localStorage.removeItem('app_initialized');
+        
+        // Clear any globally used codes
+        localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
+        
         // Refresh codes list
         fetchCodes();
         
         // Show success message
-        toast.success('All codes have been deleted', {
+        toast.success('All codes have been permanently deleted', {
           position: 'top-right',
           autoClose: 3000
         });
-    } catch (err) {
-        console.error('Error clearing codes:', err);
-        toast.error('Error clearing codes: ' + err.message, {
-          position: 'top-right',
-          autoClose: 3000
-        });
-      }
+      } catch (err) {
+          console.error('Error clearing codes:', err);
+          toast.error('Error clearing codes: ' + err.message, {
+            position: 'top-right',
+            autoClose: 3000
+          });
+        }
     }
   };
 
@@ -398,6 +405,29 @@ const Admin = () => {
         console.error('Error deleting all codes:', err);
         toast.error(`Error deleting all codes: ${err.message || 'Unknown error'}`);
       }
+    }
+  };
+
+  // Function to enable code generation (in case it was disabled)
+  const enableCodeGeneration = () => {
+    try {
+      // Remove the force empty flag
+      localStorage.removeItem('codes_force_empty');
+      
+      // Show success message
+      toast.success('Code generation has been re-enabled', {
+        position: 'top-right',
+        autoClose: 3000
+      });
+      
+      // Refresh codes list
+      fetchCodes();
+    } catch (err) {
+      console.error('Error enabling code generation:', err);
+      toast.error('Error enabling code generation: ' + err.message, {
+        position: 'top-right',
+        autoClose: 3000
+      });
     }
   };
 
@@ -756,14 +786,24 @@ const Admin = () => {
                   <i className="fas fa-share-alt me-2"></i>
                   Share Codes
                 </button>
-                <button 
-                  className="btn btn-danger" 
-                  onClick={clearAllCodes}
-                  disabled={loading || codes.length === 0}
-                >
-                  <i className="fas fa-trash-alt me-2"></i>
-                  Delete All Codes
-                </button>
+                {localStorage.getItem('codes_force_empty') === 'true' ? (
+                  <button 
+                    className="btn btn-outline-success" 
+                    onClick={enableCodeGeneration}
+                  >
+                    <i className="fas fa-unlock me-2"></i>
+                    Enable Code Generation
+                  </button>
+                ) : (
+                  <button 
+                    className="btn btn-danger" 
+                    onClick={clearAllCodes}
+                    disabled={loading || codes.length === 0}
+                  >
+                    <i className="fas fa-trash-alt me-2"></i>
+                    Delete All Codes
+                  </button>
+                )}
               </div>
             </div>
           </div>

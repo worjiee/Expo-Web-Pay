@@ -56,6 +56,12 @@ export const isSyncNeeded = (lastCheckedTimestamp) => {
 // Function to get current codes from localStorage
 export const getLocalCodes = () => {
   try {
+    // Check if codes have been forcefully cleared
+    if (localStorage.getItem('codes_force_empty') === 'true') {
+      console.log('Codes are forcefully kept empty due to user preference');
+      return [];
+    }
+    
     const storedCodes = localStorage.getItem('mockDb_codes');
     
     if (!storedCodes) {
@@ -84,6 +90,18 @@ export const getLocalCodes = () => {
 // Function to save codes to localStorage
 export const saveLocalCodes = (codes) => {
   try {
+    // If codes have been forcefully cleared, don't save new codes unless explicitly overridden
+    if (localStorage.getItem('codes_force_empty') === 'true') {
+      // Only allow saving if the codes array is explicitly empty - this allows clearing codes
+      // but prevents automatic re-adding of codes
+      if (codes.length > 0) {
+        console.log('Skipping code save due to force_empty flag');
+        return false;
+      } else {
+        console.log('Saving empty codes array (allowed despite force_empty flag)');
+      }
+    }
+    
     // Ensure all codes are standardized before saving
     const standardizedCodes = Array.isArray(codes) ? codes.map(code => ({
       id: code.id || Math.floor(Math.random() * 100000),
@@ -380,6 +398,8 @@ export const addPredefinedCode = (codeValue) => {
 
 // Initialize with predefined codes
 // Add your desired codes here
+// DISABLED - No more automatic code initialization
+/* 
 (() => {
   // Empty predefined codes array - no default codes
   const predefinedCodes = [];
@@ -389,6 +409,13 @@ export const addPredefinedCode = (codeValue) => {
     addPredefinedCode(code);
   });
 })();
+*/
+
+// Check for initialization flag to prevent re-adding codes
+if (!localStorage.getItem('app_initialized')) {
+  console.log('First app initialization - setting initialized flag');
+  localStorage.setItem('app_initialized', 'true');
+}
 
 // NEW SOLUTION: LOCAL STORAGE EXPIRATION WORKAROUND
 // Create a key that is less likely to be expired
