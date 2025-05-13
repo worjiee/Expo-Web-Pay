@@ -509,7 +509,7 @@ const Admin = () => {
                   <div className="card" style={{ background: '#21262d', border: 'none', boxShadow: '0 2px 5px rgba(0, 0, 0, 0.3)' }}>
                     <div className="card-body text-center">
                       <h3 className="display-4" style={{ color: 'white' }}>{codes.length}</h3>
-                      <p className="text-muted">Total Codes</p>
+                      <p style={{ color: '#8b949e' }}>Total Codes</p>
                     </div>
                   </div>
                 </div>
@@ -517,7 +517,7 @@ const Admin = () => {
                   <div className="card" style={{ background: '#21262d', border: 'none', boxShadow: '0 2px 5px rgba(0, 0, 0, 0.3)' }}>
                     <div className="card-body text-center">
                       <h3 className="display-4" style={{ color: '#4ade80' }}>{codes.filter(c => !c.used && !c.isUsed).length}</h3>
-                      <p className="text-muted">Available Codes</p>
+                      <p style={{ color: '#8b949e' }}>Available Codes</p>
                     </div>
                   </div>
                 </div>
@@ -525,7 +525,7 @@ const Admin = () => {
                   <div className="card" style={{ background: '#21262d', border: 'none', boxShadow: '0 2px 5px rgba(0, 0, 0, 0.3)' }}>
                     <div className="card-body text-center">
                       <h3 className="display-4" style={{ color: '#f87171' }}>{codes.filter(c => c.used || c.isUsed).length}</h3>
-                      <p className="text-muted">Used Codes</p>
+                      <p style={{ color: '#8b949e' }}>Used Codes</p>
                     </div>
                   </div>
                 </div>
@@ -540,7 +540,7 @@ const Admin = () => {
           <div className="col-md-6">
             <div className="card" style={{ background: '#161b22', border: 'none', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}>
               <div className="card-header" style={{ background: '#21262d', borderBottom: '1px solid #30363d', color: 'white' }}>
-                <h5>Generate Random Codes</h5>
+                <h5 style={{ color: 'white' }}>Generate Random Codes</h5>
               </div>
               <div className="card-body">
                 <button className="btn me-2 mb-2" style={{ background: '#1f6feb', color: 'white', border: 'none' }} onClick={generateCode}>
@@ -567,7 +567,7 @@ const Admin = () => {
           <div className="col-md-6">
             <div className="card" style={{ background: '#161b22', border: 'none', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}>
               <div className="card-header" style={{ background: '#21262d', borderBottom: '1px solid #30363d', color: 'white' }}>
-                <h5>Add New Code</h5>
+                <h5 style={{ color: 'white' }}>Add New Code</h5>
               </div>
               <div className="card-body">
                 <div className="input-group mb-3">
@@ -584,7 +584,7 @@ const Admin = () => {
                     Add Code
                   </button>
                 </div>
-                <small className="text-muted">Added codes will work on all devices immediately.</small>
+                <small style={{ color: '#8b949e' }}>Added codes will work on all devices immediately.</small>
               </div>
             </div>
           </div>
@@ -593,9 +593,9 @@ const Admin = () => {
         <div className="card" style={{ background: '#161b22', border: 'none', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}>
           <div className="card-header d-flex justify-content-between align-items-center" style={{ background: '#21262d', borderBottom: '1px solid #30363d', color: 'white' }}>
             <div>
-            <h5>Code Database</h5>
+            <h5 style={{ color: 'white' }}>Code Database</h5>
               {lastUpdated && (
-                <small className="text-muted">
+                <small style={{ color: '#8b949e' }}>
                   Last updated: {lastUpdated.toLocaleTimeString()}
                 </small>
               )}
@@ -670,17 +670,17 @@ const Admin = () => {
               <table className="table" style={{ color: '#c9d1d9' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #30363d' }}>
-                    <th>Code</th>
-                    <th>Status</th>
-                    <th>Generated At</th>
-                    <th>Used At</th>
-                    <th>Actions</th>
+                    <th style={{ color: '#8b949e' }}>Code</th>
+                    <th style={{ color: '#8b949e' }}>Status</th>
+                    <th style={{ color: '#8b949e' }}>Generated At</th>
+                    <th style={{ color: '#8b949e' }}>Used At</th>
+                    <th style={{ color: '#8b949e' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {codes.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="text-center py-3">
+                      <td colSpan="5" className="text-center py-3" style={{ color: '#8b949e' }}>
                         <i className="fas fa-info-circle me-2"></i>
                         No codes available. Generate some codes to get started.
                       </td>
@@ -699,8 +699,10 @@ const Admin = () => {
                             {code.used || code.isUsed ? 'Used' : 'Available'}
                           </span>
                         </td>
-                        <td>{code.generatedAt ? new Date(code.generatedAt).toLocaleString() : 'Invalid Date'}</td>
-                        <td>
+                        <td style={{ color: '#8b949e' }}>
+                          {code.generatedAt ? new Date(code.generatedAt).toLocaleString() : 'Invalid Date'}
+                        </td>
+                        <td style={{ color: '#8b949e' }}>
                           {code.usedAt ? new Date(code.usedAt).toLocaleString() : 'Not used yet'}
                         </td>
                         <td>
