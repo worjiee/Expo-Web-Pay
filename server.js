@@ -17,6 +17,7 @@ console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET);
 // List of allowed origins
 const allowedOrigins = [
   'http://localhost:3000',
+  'https://websitepay.netlify.app', // Netlify frontend
   'https://q-i0ht56yjx-karls-projects-fccc69ea.vercel.app',
   'https://q-9054i8g05-karls-projects-fccc69ea.vercel.app',
   'https://q-1kzok5ant-karls-projects-fccc69ea.vercel.app',
@@ -33,9 +34,14 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Allow all origins for now while debugging - we'll log them for monitoring
-    console.log('Request origin:', origin);
-    callback(null, true);
+    // Check if the origin is in our allowed list
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // Log unknown origins but still allow them for now
+      console.log('Request from unknown origin:', origin);
+      callback(null, true);
+    }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -101,51 +107,9 @@ mongoose.connect(process.env.MONGODB_URI, {
 .then(() => console.log('MongoDB Connected'))
 .catch(err => console.log('MongoDB Connection Error:', err));
 
-// Serve static files from the React app
-const clientBuildPath = path.join(__dirname, 'client/build');
-app.use(express.static(clientBuildPath));
-console.log(`Serving static files from: ${clientBuildPath}`);
-
-// The "catchall" handler for any request that doesn't match one above
-// Send back React's index.html file
+// API server only - remove static file serving
 app.get('*', (req, res) => {
-  const indexPath = path.join(clientBuildPath, 'index.html');
-  console.log(`Serving index.html for path: ${req.path}`);
-  
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    console.error(`index.html not found at ${indexPath}`);
-    res.status(200).send(`
-      <html>
-        <head>
-          <title>WebsitePay API</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; line-height: 1.6; }
-            .container { max-width: 800px; margin: 0 auto; }
-            h1 { color: #333; }
-            .box { background: #f4f4f4; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
-            code { background: #e0e0e0; padding: 2px 5px; border-radius: 3px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>WebsitePay API Server</h1>
-            <div class="box">
-              <p>This is the API server for WebsitePay.</p>
-              <p>The frontend is hosted at: <a href="https://q-p45ykiz98-karls-projects-fccc69ea.vercel.app">https://q-p45ykiz98-karls-projects-fccc69ea.vercel.app</a></p>
-              <p>API endpoints available:</p>
-              <ul>
-                <li><code>/api/status</code> - Check API status</li>
-                <li><code>/api/auth</code> - Authentication endpoints</li>
-                <li><code>/api/codes</code> - Code management endpoints</li>
-              </ul>
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
-  }
+  res.status(404).json({ message: 'API endpoint not found' });
 });
 
 const PORT = process.env.PORT || 5000;

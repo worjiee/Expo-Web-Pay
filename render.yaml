@@ -1,0 +1,17 @@
+services:
+  # Backend API service
+  - type: web
+    name: websitepay-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/status
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false # This will be set in the Render dashboard
+      - key: JWT_SECRET
+        sync: false # This will be set in the Render dashboard
+    autoDeploy: true 

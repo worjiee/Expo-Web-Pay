@@ -193,7 +193,7 @@ const MockAPI = {
       
       const randomCode = generateRandomLetters(5);
       
-      // Add to mock database
+      // Add to mock database with EXACT SAME FORMAT as test codes
       const newId = mockDb.codes.length > 0 
         ? Math.max(...mockDb.codes.map(c => c.id)) + 1 
         : 1;
@@ -202,7 +202,8 @@ const MockAPI = {
         id: newId, 
         code: randomCode, 
         used: false,
-        createdAt: new Date().toISOString()
+        generatedAt: new Date().toISOString(),
+        usedAt: null
       };
       
       mockDb.codes.push(newCode);
@@ -306,6 +307,26 @@ const MockAPI = {
         data: {
           message: 'Code deleted successfully',
           code: deletedCode
+        }
+      };
+    },
+
+    // Add direct code adding for public use
+    add: async (codeObject) => {
+      // Add the code directly to the mock database
+      mockDb.codes.push(codeObject);
+      console.log('Added code directly to mock database:', codeObject);
+      
+      // Store updated codes
+      storeData(mockDb.codes);
+      
+      // Dispatch real-time update event
+      dispatchCodeEvent('code-created', codeObject);
+      
+      return {
+        data: {
+          code: codeObject,
+          message: 'Code added successfully'
         }
       };
     }
