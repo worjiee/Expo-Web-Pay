@@ -1,19 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast, ToastContainer } from 'react-toastify';
-import MockAPI from '../MockAPI'; // Use MockAPI directly
+import MockAPI from '../MockAPI'; // We're keeping the same API interface
 import { Link } from 'react-router-dom';
-import { 
-  getLocalCodes, 
-  saveLocalCodes, 
-  getCodeSyncChannel, 
-  getSyncTimestamp, 
-  isSyncNeeded,
-  setupBroadcastListener,
-  startPollingSync,
-  stopPollingSync,
-  updateSyncTimestamp
-} from '../proxyService';
+import { listenForCodeChanges } from '../firebaseConfig'; // Import Firebase listener
 
 const Admin = () => {
   const [codes, setCodes] = useState([]);
@@ -30,9 +20,6 @@ const Admin = () => {
   
   // Add state for last update timestamp
   const [lastUpdated, setLastUpdated] = useState(null);
-  
-  // Add state for last sync check timestamp
-  const [lastSyncCheck, setLastSyncCheck] = useState(null);
   
   // Add state for real-time update status
   const [realtimeStatus, setRealtimeStatus] = useState('initializing');
@@ -52,103 +39,39 @@ const Admin = () => {
     fetchCodes();
     setFadeIn(true);
     
-    // Set initial sync timestamp
-    setLastSyncCheck(getSyncTimestamp());
-    
-    // Setup the broadcast channel listener for real-time updates
-    const broadcastListenerSet = setupBroadcastListener((message) => {
-      console.log('Broadcast message received in Admin component:', message);
-      
-      // Handle different message types
-      switch (message.action) {
-        case 'CODE_USED_GLOBALLY':
-          // Show a toast notification when a code is used
-          toast.info(`Code ${message.data.code} was verified on another device`, {
-            position: 'top-right',
-            autoClose: 3000
-          });
-          // Refresh codes list when a code status changes
-          console.log('Code status changed, refreshing codes list');
-          fetchCodes(false); // Don't show loading indicator for automatic refreshes
-          break;
-        case 'CODE_STATUS_CHANGED':
-          // Show a toast notification for status changes
-          toast.info(`Code ${message.data.code} status changed to ${message.data.used ? 'used' : 'unused'}`, {
-            position: 'top-right',
-            autoClose: 3000
-          });
-          // Refresh codes list
-          fetchCodes(false);
-          break;
-        case 'SYNC_TIMESTAMP_UPDATED':
-          // Silent update for timestamp changes
-          setLastSyncCheck(getSyncTimestamp());
-          break;
-        case 'CODES_UPDATED':
-          toast.info('Code database updated', {
-            position: 'top-right',
-            autoClose: 3000
-          });
-          fetchCodes(false);
-          break;
-        case 'CODE_ADDED':
-          toast.success(`New code ${message.data.code} added`, {
-            position: 'top-right',
-            autoClose: 3000
-          });
-          fetchCodes(false);
-          break;
-        case 'CODES_IMPORTED':
-          if (message.data.count > 0) {
-            toast.success(`${message.data.count} codes imported on another device`, {
-              position: 'top-right',
-              autoClose: 3000
-            });
-          }
-          fetchCodes(false);
-          break;
-        default:
-          // For any other updates, check if sync is needed
-          if (isSyncNeeded(lastSyncCheck)) {
-            console.log('Sync needed based on timestamp, refreshing codes list');
-            fetchCodes(false);
-            setLastSyncCheck(getSyncTimestamp());
-          }
-      }
+    // Setup Firebase real-time listener
+    const unsubscribe = listenForCodeChanges((updatedCodes) => {
+      console.log('Received real-time code update from Firebase:', updatedCodes);
+      setCodes(updatedCodes);
+      setLastUpdated(new Date());
+      setRealtimeStatus('connected');
     });
     
-    // Set realtime status based on broadcast channel availability
-    setRealtimeStatus(broadcastListenerSet ? 'connected' : 'offline');
+    // Set realtime status based on Firebase connection
+    setRealtimeStatus('connected');
     
-    // Start polling for sync across devices (every 1 second for more real-time updates)
-    startPollingSync(() => {
-      console.log('Admin component - polling refresh triggered');
-      fetchCodes(false);
-    }, 1000); // Poll every second instead of 2 seconds
-    
-    // Clean up interval when component unmounts
+    // Clean up Firebase listener when component unmounts
     return () => {
-      // Stop polling when component unmounts
-      stopPollingSync();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
-  }, [navigate, lastSyncCheck]);
+  }, [navigate]);
 
   const fetchCodes = async (showLoading = true) => {
     try {
       if (showLoading) {
-      setLoading(true);
+        setLoading(true);
       }
-      // Use MockAPI directly
+      // Use MockAPI which now uses Firebase
       const response = await MockAPI.codes.getAll();
       if (response.success && response.data) {
         setCodes(response.data);
         // Update the last updated timestamp
         setLastUpdated(new Date());
-        // Update the last sync check timestamp
-        setLastSyncCheck(getSyncTimestamp());
       } else {
         console.error('Error in fetchCodes response format:', response);
-        setError('Error fetching codes: Invalid response format');
+        setError('Error fetching codes: ' + (response.message || 'Invalid response format'));
       }
     } catch (err) {
       console.error('Error fetching codes:', err);
@@ -172,7 +95,7 @@ const Admin = () => {
       }
     } finally {
       if (showLoading) {
-      setLoading(false);
+        setLoading(false);
       }
     }
   };
@@ -180,8 +103,8 @@ const Admin = () => {
   const handleLogout = async () => {
     try {
       await MockAPI.auth.logout();
-    toast.info('Logged out successfully');
-    navigate('/login');
+      toast.info('Logged out successfully');
+      navigate('/login');
     } catch (err) {
       console.error('Error during logout:', err);
       localStorage.removeItem('auth_token');
@@ -196,13 +119,9 @@ const Admin = () => {
       console.log('Generate code response:', response);
       
       if (response.success && response.data) {
-        // Add new code to state
-        setCodes(prevCodes => [...prevCodes, response.data]);
+        // Add new code to state - now handled by Firebase real-time updates
         
-        // Update the last sync check timestamp
-        setLastSyncCheck(getSyncTimestamp());
-        
-        // Show success toast with sync information
+        // Show success toast
         toast.success(
           <div>
             <div>Generated new code: <strong>{response.data.code}</strong></div>
@@ -221,7 +140,7 @@ const Admin = () => {
         }, 2000);
       } else {
         console.error('Invalid response from code generation:', response);
-        toast.error('Error generating code: Invalid response format');
+        toast.error('Error generating code: ' + (response.message || 'Invalid response format'));
       }
     } catch (err) {
       console.error('Error generating code:', err);
@@ -242,11 +161,7 @@ const Admin = () => {
       const response = await MockAPI.codes.generateMultiple({ count });
       
       if (response.success && response.data) {
-        // Add new codes to state
-        setCodes(prevCodes => [...prevCodes, ...response.data]);
-        
-        // Update the last sync check timestamp
-        setLastSyncCheck(getSyncTimestamp());
+        // Add new codes to state - now handled by Firebase real-time updates
         
         // Generate a list of codes for display
         const codesList = response.data.map(c => c.code).join(', ');
@@ -284,7 +199,7 @@ const Admin = () => {
         }, 2000);
       } else {
         console.error('Invalid response from multiple code generation:', response);
-        toast.error('Error generating codes: Invalid response format');
+        toast.error('Error generating codes: ' + (response.message || 'Invalid response format'));
       }
     } catch (err) {
       console.error('Error generating multiple codes:', err);
@@ -306,22 +221,26 @@ const Admin = () => {
     try {
       setLoading(true);
       
-      // Execute the create code API call
-      await MockAPI.codes.create({ 
+      // Execute the create code API call - now uses Firebase
+      const response = await MockAPI.codes.create({ 
         code: customCode.trim().toUpperCase(),
       });
       
-      // Refresh codes list
-      fetchCodes();
-      
-      // Clear input
-      setCustomCode('');
-      
-      // Show success message
-      toast.success('Custom code created successfully', { 
-        position: 'top-right',
-        autoClose: 3000
-      });
+      if (response.success) {
+        // Clear input
+        setCustomCode('');
+        
+        // Show success message
+        toast.success('Custom code created successfully', { 
+          position: 'top-right',
+          autoClose: 3000
+        });
+      } else {
+        toast.error(response.message || 'Error creating custom code', { 
+          position: 'top-right',
+          autoClose: 3000
+        });
+      }
     } catch (err) {
       console.error('Error creating custom code:', err);
       toast.error(err.message || 'Error creating custom code', { 
@@ -333,51 +252,36 @@ const Admin = () => {
     }
   };
 
-  // Function to clear all codes from localStorage
-  const clearAllCodes = () => {
+  // Function to clear all codes from database
+  const clearAllCodes = async () => {
     if (window.confirm('Are you sure you want to delete ALL codes from the database? This cannot be undone!')) {
       try {
-        // Set a permanent deletion flag
-        localStorage.setItem('permanent_code_deletion', 'true');
+        setLoading(true);
         
-        // Clear codes from all possible localStorage keys
-        localStorage.setItem('mockDb_codes', JSON.stringify([]));
+        // Delete all codes from Firebase
+        const response = await MockAPI.codes.deleteAll();
         
-        // Clear any globally used codes
-        localStorage.setItem('__code_usage_master_v1', JSON.stringify({}));
-        
-        // Clear any sync-related data
-        localStorage.setItem('code_sync_timestamp', new Date().toISOString());
-        
-        // Set a deletion timestamp to prevent automatic reloading of codes
-        localStorage.setItem('codes_last_deleted', new Date().getTime().toString());
-        
-        // Remove any additional keys that might be storing codes
-        localStorage.removeItem('predefined_codes');
-        localStorage.removeItem('cached_codes');
-        localStorage.removeItem('app_codes');
-        localStorage.removeItem('backup_codes');
-        
-        // Clear any remaining initialization flags
-        localStorage.removeItem('app_initialized');
-        localStorage.removeItem('codes_force_empty');
-        localStorage.removeItem('user_initiated_save');
-        
-        // Refresh codes list
-        fetchCodes();
-        
-        // Show success message
-        toast.success('All codes have been permanently erased and will stay deleted on refresh', {
-          position: 'top-right',
-          autoClose: 3000
-        });
-      } catch (err) {
-          console.error('Error clearing codes:', err);
-          toast.error('Error clearing codes: ' + err.message, {
+        if (response.success) {
+          // Show success message
+          toast.success('All codes have been permanently erased from the database', {
+            position: 'top-right',
+            autoClose: 3000
+          });
+        } else {
+          toast.error('Error clearing all codes: ' + (response.message || 'Unknown error'), {
             position: 'top-right',
             autoClose: 3000
           });
         }
+      } catch (err) {
+        console.error('Error clearing codes:', err);
+        toast.error('Error clearing codes: ' + err.message, {
+          position: 'top-right',
+          autoClose: 3000
+        });
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -386,49 +290,22 @@ const Admin = () => {
       const response = await MockAPI.codes.delete({ code: codeToDelete });
       
       if (response.success) {
-        // Remove code from state
-        setCodes(prevCodes => prevCodes.filter(c => c.code !== codeToDelete));
         toast.success(`Deleted code: ${codeToDelete}`, {
           position: 'top-right',
           autoClose: 3000
         });
-        } else {
+      } else {
         console.error('Error deleting code:', response);
         toast.error(`Error deleting code: ${response.message || 'Unknown error'}`);
-        }
-      } catch (err) {
+      }
+    } catch (err) {
       console.error('Error deleting code:', err);
       toast.error(`Error deleting code: ${err.message || 'Unknown error'}`);
     }
   };
 
-  const deleteAllCodes = async () => {
-    if (window.confirm('Are you sure you want to delete ALL codes? This cannot be undone!')) {
-    try {
-        const response = await MockAPI.codes.deleteAll();
-        
-        if (response.success) {
-      setCodes([]);
-          toast.success('All codes deleted successfully', {
-            position: 'top-right',
-            autoClose: 3000
-          });
-        } else {
-          console.error('Error deleting all codes:', response);
-          toast.error(`Error deleting all codes: ${response.message || 'Unknown error'}`);
-        }
-    } catch (err) {
-        console.error('Error deleting all codes:', err);
-        toast.error(`Error deleting all codes: ${err.message || 'Unknown error'}`);
-      }
-    }
-  };
-
   // Function to manually trigger sync
   const forceSync = () => {
-    // Update the timestamp to trigger sync on other devices
-    updateSyncTimestamp();
-    
     // Fetch fresh codes
     fetchCodes();
     
@@ -440,24 +317,9 @@ const Admin = () => {
     
     // Update sync status
     setSyncStatus('Syncing...');
-  };
-  
-  // Function to re-enable code generation
-  const enableCodeGeneration = () => {
-    // Remove the deletion timestamp
-    localStorage.removeItem('codes_last_deleted');
-    
-    // Remove the permanent deletion flag
-    localStorage.removeItem('permanent_code_deletion');
-    
-    // Show success message
-    toast.success('Code generation has been re-enabled', {
-      position: 'top-right',
-      autoClose: 3000
-    });
-    
-    // Refresh codes list
-    fetchCodes();
+    setTimeout(() => {
+      setSyncStatus('');
+    }, 2000);
   };
 
   return (
@@ -607,13 +469,13 @@ const Admin = () => {
                 {realtimeStatus === 'connected' && (
                   <span className="ms-2 badge bg-success">
                     <i className="fas fa-cloud-upload-alt me-1"></i>
-                    Realtime Sync Active
+                    Firebase Sync Active
                   </span>
                 )}
                 {realtimeStatus === 'offline' && (
                   <span className="ms-2 badge bg-warning text-dark">
                     <i className="fas fa-exclamation-triangle me-1"></i>
-                    Offline
+                    Firebase Offline
                   </span>
                 )}
               </div>
@@ -695,7 +557,7 @@ const Admin = () => {
                     Add Code
                   </button>
                 </div>
-                <small className="text-muted">Added codes will work on all devices.</small>
+                <small className="text-muted">Added codes will work on all devices immediately.</small>
               </div>
             </div>
           </div>
@@ -738,65 +600,6 @@ const Admin = () => {
                   <i className="fas fa-download me-2"></i>
                   Export Codes
                 </button>
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={() => {
-                    // Implementation for sharing codes between devices
-                    try {
-                      // Filter only unused codes for sharing
-                      const unusedCodes = codes.filter(c => !c.used && !c.isUsed);
-                      
-                      if (unusedCodes.length === 0) {
-                        toast.error('No unused codes available to share');
-                        return;
-                      }
-                      
-                      // Convert the codes to a shareable format
-                      const shareCodes = unusedCodes.map(c => ({
-                        id: c.id,
-                        code: c.code,
-                        used: false,
-                        generatedAt: c.generatedAt
-                      }));
-                      
-                      // Convert to Base64 string for sharing
-                      const encodedCodes = btoa(JSON.stringify(shareCodes));
-                      
-                      // Create a shareable link
-                      const shareLink = `${window.location.origin}?import=${encodedCodes}`;
-                      
-                      // Copy to clipboard
-                      navigator.clipboard.writeText(shareLink)
-                        .then(() => {
-                          toast.success('Share link copied to clipboard! Paste this link on your other device.');
-                        })
-                        .catch(err => {
-                          console.error('Could not copy to clipboard:', err);
-                          // Show the link in a modal as fallback
-                          toast.info(
-                            <div>
-                              <p>Copy this link manually:</p>
-                              <input 
-                                type="text"
-                                className="form-control form-control-sm mt-2"
-                                value={shareLink}
-                                onClick={(e) => e.target.select()}
-                                readOnly
-                              />
-                            </div>,
-                            { autoClose: 10000 }
-                          );
-                        });
-                    } catch (err) {
-                      console.error('Error sharing codes:', err);
-                      toast.error('Error creating share link');
-                    }
-                  }}
-                  disabled={codes.filter(c => !c.used && !c.isUsed).length === 0}
-                >
-                  <i className="fas fa-share-alt me-2"></i>
-                  Share Codes
-                </button>
                 <button 
                   className="btn btn-danger" 
                   onClick={clearAllCodes}
@@ -805,15 +608,6 @@ const Admin = () => {
                   <i className="fas fa-trash-alt me-2"></i>
                   Delete All Codes
                 </button>
-                {localStorage.getItem('codes_last_deleted') && (
-                  <button 
-                    className="btn btn-outline-success ms-2" 
-                    onClick={enableCodeGeneration}
-                  >
-                    <i className="fas fa-unlock me-2"></i>
-                    Enable Code Generation
-                  </button>
-                )}
               </div>
             </div>
           </div>
@@ -827,11 +621,14 @@ const Admin = () => {
                   // Filter codes based on search query
                   const searchQuery = e.target.value.toLowerCase();
                   if (searchQuery) {
-                    setCodes(codes.filter(c => 
-                      c.code.toLowerCase().includes(searchQuery) ||
-                      (c.id && c.id.toString().includes(searchQuery)) ||
-                      (c._id && c._id.toString().includes(searchQuery))
-                    ));
+                    // Filter locally for search
+                    fetchCodes().then(() => {
+                      setCodes(prevCodes => prevCodes.filter(c => 
+                        c.code.toLowerCase().includes(searchQuery) ||
+                        (c.id && c.id.toString().includes(searchQuery)) ||
+                        (c._id && c._id.toString().includes(searchQuery))
+                      ));
+                    });
                   } else {
                     // If search query is empty, fetch all codes
                     fetchCodes();
