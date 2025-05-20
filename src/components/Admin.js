@@ -152,17 +152,19 @@ const Admin = () => {
 
   const generateMultipleCodes = async () => {
     try {
-      if (isNaN(count) || count < 1 || count > 100) {
+      // Ensure count is a positive integer
+      const countValue = parseInt(count) || 1;
+      if (isNaN(countValue) || countValue < 1 || countValue > 100) {
         toast.error('Please enter a valid count (1-100)');
         return;
       }
       
       setLoading(true);
-      const response = await MockAPI.codes.generateMultiple({ count });
+      console.log(`Generating ${countValue} codes...`);
+      const response = await MockAPI.codes.generateMultiple({ count: countValue });
+      console.log('Generate multiple codes response:', response);
       
       if (response.success && response.data) {
-        // Add new codes to state - now handled by Firebase real-time updates
-        
         // Generate a list of codes for display
         const codesList = response.data.map(c => c.code).join(', ');
         
@@ -556,8 +558,13 @@ const Admin = () => {
                     max="100"
                     style={{ background: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d' }}
                   />
-                  <button className="btn" style={{ background: '#238636', color: 'white', border: 'none' }} onClick={generateMultipleCodes}>
-                    Generate Multiple Codes
+                  <button 
+                    className="btn" 
+                    style={{ background: '#238636', color: 'white', border: 'none' }} 
+                    onClick={generateMultipleCodes}
+                    disabled={loading}
+                  >
+                    {loading ? 'Generating...' : 'Generate Multiple Codes'}
                   </button>
                 </div>
               </div>

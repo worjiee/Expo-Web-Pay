@@ -274,6 +274,7 @@ const MockAPI = {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const { count = 1 } = options;
+      console.log(`MockAPI generateMultiple called with count: ${count}`);
       const generatedCodes = [];
       const errors = [];
       
@@ -281,10 +282,12 @@ const MockAPI = {
         // Get all existing codes first to check for duplicates
         const { data: existingCodes } = await MockAPI.codes.getAll();
         const existingCodeValues = existingCodes ? existingCodes.map(c => c.code) : [];
+        console.log(`Found ${existingCodeValues.length} existing codes, now generating ${count} new codes`);
         
         // Generate and save codes one by one
         for (let i = 0; i < count; i++) {
           try {
+            console.log(`Generating code ${i+1} of ${count}`);
             // Generate a unique code
             let randomCode;
             let attempts = 0;
@@ -318,6 +321,7 @@ const MockAPI = {
             };
             
             // Save to Firebase
+            console.log(`Saving code ${randomCode} to Firebase`);
             const result = await saveCode(newCode);
             
             if (result.success) {
@@ -329,16 +333,20 @@ const MockAPI = {
               
               // Add to result
               generatedCodes.push(newCode);
+              console.log(`Successfully saved code ${randomCode} with ID ${newCode.id}`);
             } else {
               errors.push(`Failed to save code ${randomCode}: ${result.error || 'Unknown error'}`);
+              console.error(`Failed to save code ${randomCode}:`, result.error);
             }
           } catch (error) {
             const errorMessage = handleFirebaseError(error, `generating code ${i+1}/${count}`);
             errors.push(errorMessage);
+            console.error(`Error generating code ${i+1}/${count}:`, errorMessage);
           }
         }
         
         // Return result
+        console.log(`Generated ${generatedCodes.length} codes total (requested: ${count})`);
         if (generatedCodes.length > 0) {
           return {
             success: true,
@@ -354,6 +362,7 @@ const MockAPI = {
         }
       } catch (error) {
         const errorMessage = handleFirebaseError(error, 'generating multiple codes');
+        console.error('Error generating multiple codes:', errorMessage);
         return {
           success: false,
           message: 'Error generating multiple codes: ' + errorMessage

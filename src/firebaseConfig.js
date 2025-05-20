@@ -133,7 +133,7 @@ export const saveCode = async (code) => {
     }
     
     // Create a reference with an auto-generated ID
-    const codeId = code.id || Date.now().toString();
+    const codeId = code.id || Date.now().toString() + Math.floor(Math.random() * 1000);
     const codeRef = ref(database, `codes/${codeId}`);
     
     // Standardize the code format
@@ -144,8 +144,11 @@ export const saveCode = async (code) => {
       usedAt: code.usedAt || null
     };
     
+    console.log(`Firebase saving code ${standardizedCode.code} with ID ${codeId}`);
+    
     // Set the data
     await set(codeRef, standardizedCode);
+    console.log(`Firebase successfully saved code ${standardizedCode.code}`);
     return {
       success: true,
       id: codeId
