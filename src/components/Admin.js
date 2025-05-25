@@ -4,11 +4,17 @@ import { toast, ToastContainer } from 'react-toastify';
 import MockAPI from '../MockAPI'; // We're keeping the same API interface
 import { Link } from 'react-router-dom';
 import { listenForCodeChanges } from '../firebaseConfig'; // Import Firebase listener
+import '../styles/Admin.css';
 
 const Admin = () => {
+  const navigate = useNavigate();
   const [codes, setCodes] = useState([]);
-  const [count, setCount] = useState(1);
-  const [customCode, setCustomCode] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [multipleCount, setMultipleCount] = useState(1);
+  const [newCustomCode, setNewCustomCode] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const [bulkCodes, setBulkCodes] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,7 +22,6 @@ const Admin = () => {
   const [file, setFile] = useState(null);
   const [syncLink, setSyncLink] = useState('');
   const [syncStatus, setSyncStatus] = useState('');
-  const navigate = useNavigate();
   
   // Add state for last update timestamp
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -696,7 +701,7 @@ const Admin = () => {
                     codes.map((code) => (
                       <tr key={code.id || code._id} style={{ borderBottom: '1px solid #30363d' }}>
                         <td>
-                          <strong style={{ color: 'white' }}>{code.code}</strong>
+                          <strong style={{ color: '#58a6ff' }}>{code.code}</strong>
                         </td>
                         <td>
                           <span className={`badge ${code.used || code.isUsed ? 'bg-danger' : ''}`} style={{ 
