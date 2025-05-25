@@ -11,8 +11,8 @@ const Admin = () => {
   const [codes, setCodes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [multipleCount, setMultipleCount] = useState(1);
-  const [newCustomCode, setNewCustomCode] = useState('');
+  const [count, setCount] = useState(1);
+  const [customCode, setCustomCode] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
   const [bulkCodes, setBulkCodes] = useState('');
